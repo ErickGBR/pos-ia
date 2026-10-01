@@ -86,7 +86,7 @@ const { Producto, Venta, VentaDetalle } = modelos;
 // --- 3. Repositorios (implementaciones concretas de los contratos) -----------
 const productoReadRepo = new ProductoReadRepository(Producto);
 const productoWriteRepo = new ProductoWriteRepository(Producto, sequelize);
-const ventaReadRepo = new VentaReadRepository(Venta, VentaDetalle);
+const ventaReadRepo = new VentaReadRepository(Venta, VentaDetalle, Producto);
 const ventaWriteRepo = new VentaWriteRepository(sequelize);
 
 // --- 4. Services (dependen de interfaces, no de implementaciones) -----------

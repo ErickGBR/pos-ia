@@ -21,6 +21,10 @@
 class VentaReadRepository {
   /**
    * Listado paginado de ventas, orden `createdAt DESC`, con sus lineas.
+   *
+   * Cada linea sale con `nombre` (del producto actual, por JOIN con LEFT): sin
+   * el, el frontend cae en un fallback y muestra "Producto 1". La linea nunca
+   * se pierde por falta del nombre: si no se puede resolver, sale `null`.
    * @param {{page: number, limit: number, offset: number}} parametros
    * @returns {Promise<{data: Object[], total: number}>}
    */
