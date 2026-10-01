@@ -34,6 +34,11 @@ coverage/
 .nyc_output/
 *.lcov
 
+# --- Artefactos de verificacion en navegador ----------------------
+# Capturas y dumps que deja la verificacion automatizada con Playwright:
+# son evidencia de una corrida, no parte del proyecto.
+.playwright-mcp/
+
 # --- Builds / dist ------------------------------------------------
 dist/
 build/

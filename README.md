@@ -22,6 +22,7 @@ Sistema de punto de venta (POS) de escritorio con tres piezas: un **catálogo de
 10. [Cómo verificar que todo funciona](#10-cómo-verificar-que-todo-funciona)
 11. [Estructura del monorepo](#11-estructura-del-monorepo)
 12. [Notas y troubleshooting](#12-notas-y-troubleshooting)
+13. [Cómo se construyó este proyecto](#13-cómo-se-construyó-el-proyecto)
 - [Créditos, licencia y aviso](#créditos-licencia-y-aviso)
 
 ---
@@ -307,6 +308,18 @@ docker exec pos-basic-ia-db mysql -upos_user -p"$(grep '^DB_PASSWORD=' .env | cu
 
 > **Sin este paso las ventas no funcionan.** El único camino de escritura de ventas del sistema es `CALL sp_registrar_venta(...)` (decisión D2): no hay INSERT de respaldo en la aplicación, ni un fallback con el ORM. Si el procedimiento no existe, el `POST /api/ventas` no puede registrar nada. *(Consecuencia derivada del código; el caso "SP ausente" no se provocó a propósito para no dejar la base rota.)*
 
+### Datos de ejemplo (seeder)
+
+```bash
+cd backend
+npm run seed        # inserta el catálogo de ejemplo si falta
+npm run seed:undo   # lo retira (respeta los productos que ya tienen ventas)
+```
+
+Verificado en este entorno: `npm run seed` termina con `[seed] catalogo de ejemplo ya completo: 25 productos, nada que insertar.` — es decir, carga **25 productos** con `codigo_barras` con prefijo `SEED-`, definidos en `backend/src/seeders/20251001000000-catalogo-productos.js`. Es **idempotente**: sólo inserta los códigos que faltan, así que se puede correr las veces que haga falta.
+
+Sólo siembra **productos**, nunca ventas: un seeder que inserte ventas crearía un segundo camino de escritura al margen del Stored Procedure (D2). Las ventas de ejemplo se generan vendiendo de verdad (`POST /api/ventas`).
+
 ---
 
 ## 8. Ejecución
@@ -399,7 +412,7 @@ Notas del contrato:
 
 ## 10. Cómo verificar que todo funciona
 
-Chequeos mínimos, en orden. Los resultados que siguen son los que se obtuvieron en este entorno (los `id` pueden variar: usá los que devuelva tu API).
+Chequeos mínimos, en orden. Los resultados que siguen son los que se obtuvieron en este entorno, en una corrida **previa a la carga del catálogo del seeder** (`npm run seed`, que hoy deja **25 productos** con prefijo `SEED-`): en tu base los `id` —y a veces los nombres— van a variar, así que usá siempre los que devuelva tu API. Lo que sí importa es el **orden** de los pasos: el caso "producto CON ventas → 409" del paso 6 supone que ese producto es el que vendiste en el paso 5.
 
 **1. La base está sana**
 
@@ -540,6 +553,7 @@ pos-basic-ia/
 │       ├── interfaces/       # contratos (DIP) de cada repository
 │       ├── models/           # Producto · Venta · VentaDetalle (ventas: SOLO LECTURA)
 │       ├── migrations/       # fuente autoritativa del schema
+│       ├── seeders/          # seeder idempotente: 25 productos de ejemplo (prefijo SEED-)
 │       ├── middlewares/      # asyncHandler · validate (forma) · errorHandler (status)
 │       └── errors/           # domain-errors.js · sp-error.js
 ├── frontend/                 # SPA Vue 2 + Vuetify 2 + Axios (sin router ni store global)
@@ -607,7 +621,7 @@ y no se borra nada. Si la verificación no puede hacerse (p. ej. `venta_detalle`
 | `npm run db:up` falla con `falta DB_NAME en .env` | No existe `.env`. `cp .env.example .env`. |
 | El backend sale con `[db] no se pudo conectar` | MySQL no está arriba o mal el `.env`. `npm run db:up` y mirá `docker inspect --format '{{.State.Health.Status}}' pos-basic-ia-db` (esperado: `healthy`). El servidor **no** arranca a medias: hace `authenticate()` antes de `listen()`. |
 | `POST /api/ventas` falla porque no existe el procedimiento | Falta el paso 6 de la instalación (instalar `scripts/sp_registrar_venta.sql`). |
-| `npm run seed` termina con `ERROR: ENOENT ... src/seeders` | **Verificado:** el script existe en `backend/package.json` pero **no hay seeders** (`backend/src/seeders/` no existe en esta rama), así que `db:seed:all` revienta. No usarlo: cargá los datos de ejemplo creando productos por la API. *(Pendiente: crear seeders o sacar el script.)* |
+| `npm run seed` inserta productos que no quería | **Verificado:** el seeder existe (`backend/src/seeders/20251001000000-catalogo-productos.js`) y carga **25 productos** de ejemplo con prefijo `SEED-`. Es idempotente (sólo inserta códigos que faltan) y `npm run seed:undo` los retira respetando los que ya tienen ventas. Para no cargarlos, simplemente no corras el paso: el catálogo se puede alimentar a mano por la API. |
 | El navegador bloquea las llamadas por CORS | `CORS_ORIGIN` no incluye el origen del frontend (`http://localhost:8080`). |
 | `Connection refused en 3306` | Estás apuntando al puerto equivocado: en el host es **3307**. |
 | El frontend no puede escribir `frontend/.env` | No hace falta: `http.js` y `vue.config.js` traen defaults equivalentes en código. |
@@ -617,10 +631,57 @@ y no se borra nada. Si la verificación no puede hacerse (p. ej. `venta_detalle`
 
 ---
 
+## 13. Cómo se construyó este proyecto
+
+Esta sección describe el proceso real de desarrollo: con qué herramientas de IA se construyó, qué roles participaron y qué prácticas se aplicaron. Es honesta por diseño: lo que no se pudo comprobar está marcado como pendiente en el resto del documento, y ningún apartado se dio por bueno sin verificarlo.
+
+### 13.1 Tecnologías de IA
+
+| Herramienta | Para qué se usó |
+| --- | --- |
+| **Claude** (agente orquestador y subagentes especializados) | Planificación, decisiones de arquitectura, implementación por capas y revisión de código. |
+| **OpenCode** | Entorno de ejecución de los agentes: lectura/escritura de archivos, shell, git y conexión con las herramientas de verificación. |
+| **Playwright** | Verificación automatizada en navegador: carga de la SPA, recorrido de los flujos y capturas como evidencia. Los artefactos `.playwright-mcp/` que dejó esa verificación están en `.gitignore` y **no** se versionan. |
+
+Tecnologías del proyecto en sí (no son IA): **Node.js · Express · Sequelize · MySQL 8 con Stored Procedures · Vue 2 · Vuetify · Axios · Docker Compose** — el stack completo, con versiones, está en la sección [3](#3-stack-y-versiones-exactas).
+
+### 13.2 Roles que participaron
+
+El trabajo se repartió entre agentes identificados **sólo por su rol** (sin nombres propios, ni de personas ni de agentes):
+
+| Rol | Qué le tocó |
+| --- | --- |
+| **Agente orquestador** | Definió el plan de fases, el orden del trabajo y la integración entre fases; cerró las ambigüedades de la prueba antes de escribir código. |
+| **Agente arquitecto de sistemas** | Fijó las decisiones D1-D6, el mapa de capas, los contratos de casos de uso UC-1..UC-4 y las Reglas de Oro en [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md). |
+| **Agente senior de backend** | Implementó la API por capas: `routes`, `controllers`, `services`, `repositories`, `models`, el composition root `container.js` y los middlewares de validación y errores. |
+| **Agente senior de frontend** | Implementó la SPA en Vue 2 + Vuetify (catálogo, terminal de ventas, historial) y la capa `frontend/src/api/` de axios. |
+| **Agente de datos** | Migraciones de Sequelize, `scripts/schema.sql`, la definición canónica del Stored Procedure `sp_registrar_venta` y el seeder del catálogo. |
+| **Agente de seguridad** | CORS con lista explícita de orígenes y fail-closed en producción, validación de entrada en dos niveles, secretos fuera de git (`.env` ignorado / `.env.example` versionado) y baja de producto fail-closed. |
+| **Agente de revisión de código (code review)** | Revisión con **veredicto vinculante** de cada fase antes de integrarla: cualquier desvío del blueprint se rechazaba. |
+| **Agente de QA / pruebas** | Verificación con evidencia real: `curl` contra el API corriendo, instalación y ejercicio del SP, reglas de negocio, build del frontend y recorrido en navegador. |
+| **Agente de documentación** | `README.md`, `docs/ARQUITECTURA.md` y la documentación inline del código. |
+
+### 13.3 Prácticas y proceso
+
+1. **Planificación por fases antes de escribir código.** Un blueprint de arquitectura con 6 decisiones (D1-D6) que cierran las ambigüedades de la prueba, y un plan de 5 fases con perímetro propio por rama: `feature/products`, `feature/sales` y `ProductionEnv` (integrada con merge `--no-ff`).
+2. **Arquitectura por capas estricta:** `routes → controllers → services → repositories → models`. Sin lógica de negocio en los controllers y sin SQL fuera de los repositories — es una regla de importación gateable por grep, no una recomendación.
+3. **Principios SOLID aplicados, y dónde:** SRP (una responsabilidad por capa), OCP (Strategy por tipo de movimiento en `services/venta-strategies.js`), LSP/ISP (un interface por repository en `interfaces/`) y DIP (inyección de dependencias por constructor desde un único composition root, `container.js`, sin framework de DI externo).
+4. **El Stored Procedure como único camino de escritura de ventas:** cero `INSERT` sobre `ventas`/`venta_detalle` por el ORM; los modelos de ventas son de sólo lectura y el `CALL sp_registrar_venta` vive en un solo repository (`sequelize-venta-write.repository.js`).
+5. **Revisión de código con veredicto vinculante antes de integrar cada fase:** la revisión no emitía sugerencias, frenaba el merge.
+6. **Verificación con evidencia real:** cada afirmación de este README se comprobó contra el código o contra una corrida real (health, SP instalado, ciclo de productos 201→200→409→200, venta completa, reglas de negocio, build). Nada se dio por cierto sin probarlo: lo que no se pudo probar quedó escrito como **pendiente** en el propio texto.
+7. **Commits pequeños y con mensajes que explican el por qué, no el qué** (el "qué" ya está en el diff; el mensaje explica la causa y la medición).
+8. **Nada se subió a un repositorio remoto durante el desarrollo.** Verificado en este entorno: `git ls-remote origin` no devuelve ninguna referencia y el reflog no contiene entradas de `push`.
+9. **Dos bugs reales encontrados durante la verificación**, diagnosticados midiendo y no adivinando:
+   - **Zona horaria en la base** (commit `b6dc3b6`): `createdAt` se escribía desplazado y las ventas nuevas caían **al final** del historial. Causa raíz medida: Sequelize abría cada sesión del pool con `SET time_zone = '-03:00'`, así que el `NOW()` que evalúa el SP guardaba una hora incorrecta **en disco** (no era un error de lectura). Se comparó `@@session.time_zone` contra `NOW()` / `UTC_TIMESTAMP()` y se fijó UTC tanto en la sesión como en el contenedor (`--default-time-zone=+00:00` en el compose).
+   - **Permisos de origen en el navegador** (commits `0d576ba` y `f532326`): `CORS_ORIGIN` se pasaba al paquete `cors` como un **string** con varios orígenes, que lo trata como *un* origen literal, así que el `Access-Control-Allow-Origin` devolvía la lista pegada y **ningún navegador la matcheaba**: la SPA tenía todas sus llamadas bloqueadas. Se reprodujo con preflights `curl` usando un `Origin` real, se parseó el valor como lista y se agregó el fail-closed en producción.
+
+---
+
 ## Créditos, licencia y aviso
 
 - **Autor:** Erick Burgos `<eburgosrivas1997@gmail.com>` (historial de commits del repositorio).
 - **Repositorio:** <https://github.com/ErickGBR/pos-basic-ia>
 - **Blueprint de arquitectura:** [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — decisiones D1-D6, casos de uso UC-1..UC-4 y las 15 Reglas de Oro.
 - **Licencia:** **MIT** — archivo [`LICENSE`](LICENSE) a nombre de Erick Burgos, en línea con el `"license": "MIT"` del `package.json` de la raíz.
+- **Proceso de desarrollo:** ver [Cómo se construyó este proyecto](#13-cómo-se-construyó-el-proyecto) (tecnologías de IA, roles y prácticas).
 - **⚠️ Aviso explícito:** este repositorio es una **prueba técnica**, no un producto en producción. No hay despliegue, ni CI publicado, ni usuarios reales, ni autenticación activa (`JWT_SECRET` está declarado y sin uso). Los datos y credenciales del `.env` son de ejemplo.
