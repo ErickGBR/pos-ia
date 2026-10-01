@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "POS (Point of Sale) - API y aplicacion web. Node.js + Express + Sequelize / Vue 2 + Vuetify / MySQL 8",
+  "author": "Erick Burgos",
   "engines": {
     "node": ">=18",
     "npm": ">=9"

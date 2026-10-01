@@ -1,5 +1,7 @@
 # ARQUITECTURA — POS Básico IA (Prueba Técnica Lead AI-Native)
 
+> **Autor:** Erick Burgos · **Licencia:** MIT (ver `LICENSE` en la raíz del monorepo).
+
 > **Estatus:** DECISIÓN VINCULANTE. Este documento es el blueprint que los implementadores siguen LITERALMENTE. Lo que no esté aquí, no se improvisa: se pregunta. Lo que contradiga este documento, erika lo rechaza en code review.
 > **Stack fijo (NO negociable):** Backend `Node.js + Express + Sequelize` · Frontend `Vue.js 2 + Vuetify + Axios` · DB `MySQL 8 vía Docker`.
 > **Repo:** `ErickGBR/pos-basic-ia` · **Directorio de trabajo:** clon local (inicia vacío).

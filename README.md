@@ -1,5 +1,7 @@
 # POS Basic IA
 
+**Autor y responsable del proyecto:** Erick Burgos
+
 Sistema de punto de venta (POS) de escritorio con tres piezas: un **catálogo de productos** (alta, edición, búsqueda y baja), una **terminal de ventas** (carrito con precio editable por línea) y un **historial de ventas** con ticket. API REST en Node.js + Express, SPA en Vue 2 + Vuetify y MySQL 8 corriendo en Docker.
 
 > **Aviso:** este repositorio es una **prueba técnica** (Prueba Técnica Lead AI-Native). No es un producto en producción: no hay despliegue, ni usuarios, ni autenticación activa. Ver la sección [Créditos, licencia y aviso](#créditos-licencia-y-aviso).
@@ -620,5 +622,5 @@ y no se borra nada. Si la verificación no puede hacerse (p. ej. `venta_detalle`
 - **Autor:** Erick Burgos `<eburgosrivas1997@gmail.com>` (historial de commits del repositorio).
 - **Repositorio:** <https://github.com/ErickGBR/pos-basic-ia>
 - **Blueprint de arquitectura:** [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) — decisiones D1-D6, casos de uso UC-1..UC-4 y las 15 Reglas de Oro.
-- **Licencia:** **MIT** (declarada en el `package.json` de la raíz, `"license": "MIT"`). *Nota: el repo no incluye todavía un archivo `LICENSE`.*
+- **Licencia:** **MIT** — archivo [`LICENSE`](LICENSE) a nombre de Erick Burgos, en línea con el `"license": "MIT"` del `package.json` de la raíz.
 - **⚠️ Aviso explícito:** este repositorio es una **prueba técnica**, no un producto en producción. No hay despliegue, ni CI publicado, ni usuarios reales, ni autenticación activa (`JWT_SECRET` está declarado y sin uso). Los datos y credenciales del `.env` son de ejemplo.
