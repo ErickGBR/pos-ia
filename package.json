@@ -9,11 +9,13 @@
     "npm": ">=9"
   },
   "//": "D1 (docs/ARQUITECTURA.md): monorepo. Cada app tiene su propio package.json y sus propias dependencias. La raiz NO tiene dependencias de aplicacion: solo orquesta la infraestructura MySQL 8 de Docker. Ver backend/package.json y frontend/package.json.",
-  "//scripts": "Aqui viven SOLO los scripts de infraestructura (docker). Los scripts de la API (start/dev/migrate/seed) viven en backend/package.json; los del frontend (serve/build) en frontend/package.json.",
+  "//scripts": "Aqui viven SOLO los scripts de infraestructura (docker) y los agregadores monorepo (test/lint) que orquestan backend/ y frontend/. Los scripts de la API (start/dev/migrate/seed) viven en backend/package.json; los del frontend (serve/build) en frontend/package.json.",
   "scripts": {
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
-    "db:logs": "docker compose logs -f db"
+    "db:logs": "docker compose logs -f db",
+    "test": "npm run test --prefix backend && npm run test --prefix frontend",
+    "lint": "npm run lint --prefix backend && npm run lint --prefix frontend"
   },
   "keywords": [
     "pos",
