@@ -2,7 +2,7 @@
 
 > **Autor:** Erick Burgos · **Licencia:** MIT (ver `LICENSE` en la raíz del monorepo).
 
-> **Estatus:** DECISIÓN VINCULANTE. Este documento es el blueprint que los implementadores siguen LITERALMENTE. Lo que no esté aquí, no se improvisa: se pregunta. Lo que contradiga este documento, erika lo rechaza en code review.
+> **Estatus:** DECISIÓN VINCULANTE. Este documento es el blueprint que los implementadores siguen LITERALMENTE. Lo que no esté aquí, no se improvisa: se pregunta. Lo que contradiga este documento, el revisor de código lo rechaza en code review.
 > **Stack fijo (NO negociable):** Backend `Node.js + Express + Sequelize` · Frontend `Vue.js 2 + Vuetify + Axios` · DB `MySQL 8 vía Docker`.
 > **Repo:** `ErickGBR/pos-basic-ia` · **Directorio de trabajo:** clon local (inicia vacío).
 
@@ -17,7 +17,7 @@
 | D3 | **Precio editable por ítem y congelado en el detalle.** El cliente envía `precio_unitario` por línea (por defecto el `precio` vigente del producto); el SP persiste ese valor en `venta_detalle.precio_unitario` y calcula `subtotal = cantidad * precio_unitario`. El `precio` de `productos` es solo valor sugerido/default. | Requisito de Reglas de Oro. Evita que un cambio futuro de precio reescriba la historia. |
 | D4 | **Baja de producto = borrado FÍSICO CONDICIONADO FAIL-CLOSED (no existe columna `activo`).** El repository de escritura DEBE verificar integridad referencial antes de borrar y solo borra si el producto NO tiene ventas asociadas; si tiene ventas lanza `ConflictError` (409) explicando que no se puede eliminar porque tiene historial de ventas. Si la verificación NO puede realizarse (por ejemplo, si la tabla `venta_detalle` no existiera todavía), el borrado NO se ejecuta y el error se propaga. Prohibido `destroy()` ciego sin verificación previa en todo el codebase y prohibido un guard que devuelva "sin historial de ventas" cuando en realidad no pudo verificar (fail-OPEN). | No hay columna `activo` por schema fijado por el operador. Se preserva el historial: borrar un producto con ventas rompería FK o dejaría huérfanos, por eso la baja se condiciona a no tener ventas, y ante duda o fallo de verificación se DENIEGA el borrado (fail-closed), nunca se permite. |
 | D5 | **Sin framework de DI externo. Inyección manual por constructor + único `container.js`. Sin `vue-router`, sin `pinia/vuex`, sin `nestjs/typeorm/mongoose`.** Dependencias backend permitidas: `express, sequelize, mysql2, cors, dotenv`. Frontend: `vue@2, vuetify@2, axios`. | La prueba exige dependencias mínimas y prohíbe esos paquetes. El frontend es una sola vista POS (ventas + productos por tabs de Vuetify), no necesita router ni store global: estado local del componente + capa `api/`. |
-| D6 | **Perímetro de fases y ramas (plan de 5 fases).** `feature/products` entrega SOLO el módulo de productos (capa de datos, repos, service, controller, routes, endpoints y frontend de productos); la ausencia del módulo de ventas en esa rama es intencional y NO es un defecto. `feature/sales` entrega el módulo de ventas completo, incluida la única y obligatoria `sp_registrar_venta`. `ProductionEnv` es la rama donde conviven ambos, creada con merge `--no-ff`. El árbol §3 describe ese estado final integrado, no el alcance de cada rama. | El gate de cada rama se evalúa contra su propio alcance, y el requisito de la prueba técnica del Stored Procedure se cumple y se audita en `feature/sales`, no en `feature/products`. Cierra el falso bloqueante B1 de erika (gate 1). |
+| D6 | **Perímetro de fases y ramas (plan de 5 fases).** `feature/products` entrega SOLO el módulo de productos (capa de datos, repos, service, controller, routes, endpoints y frontend de productos); la ausencia del módulo de ventas en esa rama es intencional y NO es un defecto. `feature/sales` entrega el módulo de ventas completo, incluida la única y obligatoria `sp_registrar_venta`. `ProductionEnv` es la rama donde conviven ambos, creada con merge `--no-ff`. El árbol §3 describe ese estado final integrado, no el alcance de cada rama. | El gate de cada rama se evalúa contra su propio alcance, y el requisito de la prueba técnica del Stored Procedure se cumple y se audita en `feature/sales`, no en `feature/products`. Cierra el falso bloqueante B1 del revisor de código (gate 1). |
 
 **Ambigüedades de la prueba resueltas por la arquitecta (no improvisar):**
 
@@ -280,7 +280,7 @@ pos-basic-ia/
 
 ---
 
-## 5. Reglas de Oro (checklist de code review para erika — 15 puntos, todos bloqueantes)
+## 5. Reglas de Oro (checklist de code review para el revisor de código — 15 puntos, todos bloqueantes)
 
 1. [ ] **Capas en orden:** ¿el flujo es `routes → controller → service → repository → model` sin saltos? Cualquier `controller → repository/model` o `service → model` rechaza el PR.
 2. [ ] **Cero Sequelize fuera de su lugar:** ¿NINGÚN controller/service importa `sequelize`, `Sequelize`, `mysql2` o `models/`? Grep de verificación en §6. Solo `repositories/`, `config/database.js` y `container.js` pueden.
@@ -302,7 +302,7 @@ pos-basic-ia/
 
 ## 6. Riesgos: qué puede desviar esto y cómo lo detecta el gate
 
-| # | Desvío típico | Impacto | Detección del gate (erika / CI) |
+| # | Desvío típico | Impacto | Detección del gate (revisor de código / CI) |
 |---|---------------|---------|---------------------------------|
 | R1 | Alguien mete un `findAll/findByPk/query` en un controller | Rompe SRP + DIP; la capa HTTP queda acoplada a la BD; imposible testear sin MySQL | **Grep bloqueante:** `grep -rn "sequelize\|Sequelize\|models/\|findAll\|findByPk\|\\.query(" backend/src/controllers backend/src/services backend/src/routes` debe devolver vacío. Si no, PR rechazado. |
 | R2 | Alguien usa el ORM (`Venta.create`) para la venta en vez del SP | Doble write-path; se bypasea la transacción del SP; viola "SP realmente usado" de la prueba | **Grep bloqueante:** `grep -rn "Venta.create\|Detalle.create\|bulkCreate\|VentaDetalle.create" backend/src` debe devolver vacío. **Test de contrato:** `registrar` debe mockear `ventaWriteRepo.registrarConSP` y assert que se llamó 1 vez con el JSON de líneas. |
@@ -315,7 +315,7 @@ pos-basic-ia/
 | R9 | Alguien reintroduce el fail-OPEN en la baja (guard que devuelve "sin historial" sin haber verificado) | Borra un producto con ventas; rompe historial y FK; viola D4 | Review D4 + §5 punto 9: si la verificación no puede realizarse, el borrado NO se ejecuta y el error se propaga. Prohibido retornar "sin ventas" ante fallo de verificación. |
 | R10 | Alguien lee `feature/products` esperando el módulo de ventas (falso B1) | Gate rechaza una rama correcta por alcance ajeno; ruido de revisión | D6: el gate de cada rama se evalúa contra su propio alcance; ventas y `sp_registrar_venta` solo exigibles en `feature/sales` y `ProductionEnv`; su ausencia en `feature/products` NO es defecto. |
 
-**Plan de rollback (arquitectura, no código):** si durante la implementación una decisión (D1–D6) resulta inviable, NO se improvisa: se pausa el track, se documenta la alternativa en este archivo como `D* (revisión)` con fecha y motivo, y erika re-aprueba antes de continuar. Jamás se cambia el árbol §3 ni las firmas §4 sin actualizar este documento primero.
+**Plan de rollback (arquitectura, no código):** si durante la implementación una decisión (D1–D6) resulta inviable, NO se improvisa: se pausa el track, se documenta la alternativa en este archivo como `D* (revisión)` con fecha y motivo, y el revisor de código re-aprueba antes de continuar. Jamás se cambia el árbol §3 ni las firmas §4 sin actualizar este documento primero.
 
 ---
 *Fin del blueprint. — Darjeeling, por Mr. kdh. Que el té nunca se enfríe y las capas nunca se mezclen.*
