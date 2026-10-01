@@ -19,10 +19,11 @@ const errorHandler = require('./middlewares/errorHandler');
 /**
  * @param {Object} deps
  * @param {import('express').Router} deps.productoRouter router ya cableado
+ * @param {import('express').Router} deps.ventaRouter router ya cableado
  * @param {Object} [deps.config] configuracion de la app (CORS)
  * @returns {import('express').Express}
  */
-function crearApp({ productoRouter, config = {} }) {
+function crearApp({ productoRouter, ventaRouter, config = {} }) {
   const app = express();
 
   app.disable('x-powered-by');
@@ -33,6 +34,7 @@ function crearApp({ productoRouter, config = {} }) {
   app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
   app.use('/api', productoRouter);
+  app.use('/api', ventaRouter);
 
   // Ruta no registrada -> mismo cuerpo de error que el resto de la API, en vez
   // del HTML por defecto de Express. El status lo decide `errorHandler`.

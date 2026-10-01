@@ -32,7 +32,13 @@ async function iniciar() {
     process.exit(1);
   }
 
-  const app = crearApp({ productoRouter: container.productoRouter, config });
+  // Un router por modulo, los dos cableados en `container.js`. Es el unico punto
+  // de contacto entre el composition root y Express: `app.js` no importa nada.
+  const app = crearApp({
+    productoRouter: container.productoRouter,
+    ventaRouter: container.ventaRouter,
+    config,
+  });
   const server = app.listen(config.port, () => {
     console.log('[api] POS Basico IA escuchando en http://localhost:' + config.port + '/api');
   });

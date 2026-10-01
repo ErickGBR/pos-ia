@@ -13,9 +13,10 @@
  * `new Repositorio(...)`: todos los reciben por constructor. Para cambiar la
  * implementacion (por un fake en test, por otro motor) se toca SOLO este archivo.
  *
- * Las ventas quedan cableadas con sus repositorios en estado "hueco preparado":
- * el de escritura no expone ningun metodo de escritura por modelo, solo
- * `registrarConSP` (D2).
+ * Las ventas se cablean con la MISMA disciplina: repositorios -> service ->
+ * controller -> router, con las estrategias de movimiento de venta registradas en el
+ * mapa que recibe el service (OCP). El repositorio de escritura no expone ningun
+ * metodo de escritura por modelo, solo `registrarConSP` (D2).
  */
 
 const { Sequelize } = require('sequelize');
@@ -32,6 +33,11 @@ const VentaWriteRepository = require('./repositories/sequelize-venta-write.repos
 const ProductoService = require('./services/producto.service');
 const ProductoController = require('./controllers/producto.controller');
 const crearProductoRouter = require('./routes/producto.routes');
+
+const VentaService = require('./services/venta.service');
+const { VentaNormalStrategy } = require('./services/venta-strategies');
+const VentaController = require('./controllers/venta.controller');
+const crearVentaRouter = require('./routes/venta.routes');
 
 /** Entorno activo de la configuracion de base de datos. */
 const entorno = appConfig.env;
@@ -75,32 +81,48 @@ const sequelize = new Sequelize(configuracionDeBase());
 
 // --- 2. Modelos -------------------------------------------------------------
 const modelos = definirModelos(sequelize);
-const { Producto } = modelos;
+const { Producto, Venta, VentaDetalle } = modelos;
 
 // --- 3. Repositorios (implementaciones concretas de los contratos) -----------
 const productoReadRepo = new ProductoReadRepository(Producto);
 const productoWriteRepo = new ProductoWriteRepository(Producto, sequelize);
-const ventaReadRepo = new VentaReadRepository();
-const ventaWriteRepo = new VentaWriteRepository();
+const ventaReadRepo = new VentaReadRepository(Venta, VentaDetalle);
+const ventaWriteRepo = new VentaWriteRepository(sequelize);
 
 // --- 4. Services (dependen de interfaces, no de implementaciones) -----------
 const productoService = new ProductoService(productoReadRepo, productoWriteRepo, {
   pagination: appConfig.pagination,
 });
 
+/**
+ * Mapa de estrategias de movimiento de venta (OCP, Regla de Oro 13).
+ * ESTE es el lugar donde se registra un tipo nuevo: se agrega su clase al mapa y
+ * no hay que tocar `venta.service.js`, que no conoce ningun tipo.
+ */
+const ventaStrategies = {
+  normal: new VentaNormalStrategy(),
+};
+
+const ventaService = new VentaService(ventaReadRepo, ventaWriteRepo, ventaStrategies, {
+  pagination: appConfig.pagination,
+});
+
 // --- 5. Controllers (dependen del caso de uso) -----------------------------
 const productoController = new ProductoController(productoService);
+const ventaController = new VentaController(ventaService);
 
 // --- 6. Routers (dependen del controller ya cableado) ----------------------
 const productoRouter = crearProductoRouter(productoController);
+const ventaRouter = crearVentaRouter(ventaController);
 
 module.exports = {
   sequelize,
   modelos,
   config: appConfig,
 
-  // Caso de uso (lo consume `server.js` para el cierre ordenado).
+  // Casos de uso (los consume `server.js` para el cierre ordenado).
   productoService,
+  ventaService,
 
   // Repositorios: se exportan para poder inyectar fakes en tests sin tocar
   // services ni controllers (LSP).
@@ -114,4 +136,6 @@ module.exports = {
   // Superficie HTTP.
   productoController,
   productoRouter,
+  ventaController,
+  ventaRouter,
 };

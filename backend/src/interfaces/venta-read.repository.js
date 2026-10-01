@@ -3,14 +3,17 @@
 /**
  * CONTRATO DE LECTURA DE VENTAS — backend/src/interfaces/venta-read.repository.js
  *
- * HUECO PREPARADO para la fase 2 (UC-4: listar ventas / ver ticket).
- *
- * Estado actual: la tabla `ventas` todavia NO existe en la base y este modulo no
- * esta implementado. El contrato queda declarado para que `container.js` cablee
- * la implementacion sin tocar services ni controllers.
+ * Contrato de UC-4 (listar ventas / ver ticket). Implementado en
+ * `repositories/sequelize-venta-read.repository.js`, que devuelve las ventas en
+ * objetos planos (sin instancias del ORM), porque JSON.stringify no serializa
+ * bien los getters de los modelos.
  *
  * D2 (critico): las ventas son de SOLO LECTURA para la aplicacion. Ningun
  * metodo de este contrato escribe nada.
+ *
+ * El `throw` de los cuerpos base es intencional: si la implementacion real no
+ * fuera inyectada por `container.js`, la llamada falla ruidosamente en vez de
+ * devolver datos silenciosamente vacios.
  *
  * PROHIBIDO: imports de Express, del ORM, de modelos o de `config/`.
  */
@@ -23,7 +26,7 @@ class VentaReadRepository {
    */
   // eslint-disable-next-line no-unused-vars
   async listar(parametros) {
-    throw new Error('No implementado: reserved para la fase de ventas (UC-4).');
+    throw new Error('La implementacion real la inyecta container.js (contrato, no logica).');
   }
 
   /**
@@ -33,7 +36,7 @@ class VentaReadRepository {
    */
   // eslint-disable-next-line no-unused-vars
   async obtenerPorId(id) {
-    throw new Error('No implementado: reservado para la fase de ventas (UC-4).');
+    throw new Error('La implementacion real la inyecta container.js (contrato, no logica).');
   }
 }
 
