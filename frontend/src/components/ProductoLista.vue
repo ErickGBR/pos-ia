@@ -26,7 +26,6 @@
       hide-details="auto"
       aria-label="Buscar productos por nombre o código de barras"
       @input="programarBusqueda"
-      @click:clear="buscarAhora"
     />
 
     <!-- ── Error de carga del listado ───────────────────────────── -->
@@ -311,8 +310,7 @@
  *  - Modelo completo: { id, nombre, precio, codigo_barras } (no existe stock/categoría/activo).
  */
 
-import productosApi from '../api/productos.api.js';
-import { mensajeDeError } from '../api/http.js';
+import { productosApi, mensajeDeError } from '../api';
 
 const formateador = new Intl.NumberFormat('es-SV', {
   minimumFractionDigits: 2,
@@ -366,12 +364,14 @@ export default {
 
     reglas: {
       requerido: (valor) => !!(valor && String(valor).trim()) || 'Este campo es obligatorio.',
+      // Solo validación de FORMULARIO (requerido / tipo): la regla de negocio
+      // (precio mayor a 0) vive en el backend y no se replica acá. Si el servidor
+      // la rechaza, el error se muestra tal como llega.
       precio: (valor) => {
-        const numero = Number(valor);
-        if (valor === '' || valor === null || valor === undefined || Number.isNaN(numero)) {
+        if (valor === null || valor === undefined || String(valor).trim() === '') {
           return 'Ingresá un precio.';
         }
-        return numero > 0 || 'El precio debe ser mayor a 0.';
+        return Number.isFinite(Number(valor)) || 'Ingresá un precio numérico.';
       },
     },
   }),
@@ -425,16 +425,25 @@ export default {
       }
     },
 
-    /* ── Búsqueda ──────────────────────────────────────────────── */
+    /* ── Búsqueda (un único camino: input → debounce → buscarAhora) ─ */
 
     programarBusqueda() {
       clearTimeout(this.temporizadorBusqueda);
       this.temporizadorBusqueda = setTimeout(() => this.buscarAhora(), 350);
     },
 
+    /**
+     * Único punto de entrada de la búsqueda. Cancela el debounce pendiente y
+     * recarga SOLO cuando el término o la página realmente cambiaron: así el
+     * click en "limpiar" y el disparo diferido del debounce no generan dos
+     * cargas para la misma búsqueda (bug de fase 1).
+     */
     buscarAhora() {
       clearTimeout(this.temporizadorBusqueda);
-      this.termino = (this.busqueda || '').trim();
+      const termino = (this.busqueda || '').trim();
+      const sinCambio = termino === this.termino && this.pagina === 1;
+      this.termino = termino;
+      if (sinCambio) return;
       this.pagina = 1;
       this.cargar();
     },
