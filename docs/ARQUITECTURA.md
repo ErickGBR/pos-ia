@@ -318,4 +318,4 @@ pos-basic-ia/
 **Plan de rollback (arquitectura, no código):** si durante la implementación una decisión (D1–D6) resulta inviable, NO se improvisa: se pausa el track, se documenta la alternativa en este archivo como `D* (revisión)` con fecha y motivo, y el revisor de código re-aprueba antes de continuar. Jamás se cambia el árbol §3 ni las firmas §4 sin actualizar este documento primero.
 
 ---
-*Fin del blueprint. — Darjeeling, por Mr. kdh. Que el té nunca se enfríe y las capas nunca se mezclen.*
+*Fin del blueprint. — Emitido por el agente arquitecto de sistemas, a petición del responsable del proyecto (Mr. kdh). Que el té nunca se enfríe y las capas nunca se mezclen.*
