@@ -115,7 +115,7 @@ function ventaAPlano(fila) {
         // `null` (no un texto inventado) si el nombre no se puede resolver: el
         // frontend decide que mostrar y queda trazable que el dato falta, en vez
         // de esconder un error de datos detras de un "Producto 7" convincente.
-        nombre: producto && producto.nombre != null ? producto.nombre : null,
+        nombre: producto && producto.nombre !== null ? producto.nombre : null,
         cantidad: Number(d.cantidad),
         precio_unitario: Number(d.precio_unitario),
         subtotal: Number(d.subtotal),
