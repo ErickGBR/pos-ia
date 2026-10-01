@@ -6,15 +6,16 @@
 
 ---
 
-## 0. Decisiones fuertes (leer primero — 5 decisiones que cierran ambigüedades)
+## 0. Decisiones fuertes (leer primero — 6 decisiones que cierran ambigüedades)
 
 | # | Decisión | Justificación |
 |---|----------|---------------|
 | D1 | **Monorepo con dos apps separadas:** `backend/` y `frontend/` + `scripts/` y `docs/` en raíz. Cada app tiene su propio `src/`. | La prueba no define layout. Un solo `src/` mezclaría dos runtimes y rompería SRP a nivel repo. Dos `src/` permiten capas independientes por app. |
-| D2 | **La venta NUNCA usa el ORM para escribir.** El único camino de escritura de ventas es `CALL sp_registrar_venta(:detalle_json)` vía `sequelize.query`. Los modelos `Venta/VentaDetalle` existen SOLO para lectura (listados). | Cumple "SP realmente usado por la app" de forma auditable y evita doble camino de escritura (ORM vs SP) que divergiría. |
+| D2 | **La venta NUNCA usa el ORM para escribir.** El único camino de escritura de ventas es `CALL sp_registrar_venta(:detalle_json, @pos_venta_id)` vía `sequelize.query` — precedido de `SET @pos_venta_id = NULL` y seguido de `SELECT @pos_venta_id AS id`, las tres consultas sobre la MISMA conexión (ver UC-3). Los modelos `Venta/VentaDetalle` existen SOLO para lectura (listados). | Cumple "SP realmente usado por la app" de forma auditable y evita doble camino de escritura (ORM vs SP) que divergiría. |
 | D3 | **Precio editable por ítem y congelado en el detalle.** El cliente envía `precio_unitario` por línea (por defecto el `precio` vigente del producto); el SP persiste ese valor en `venta_detalle.precio_unitario` y calcula `subtotal = cantidad * precio_unitario`. El `precio` de `productos` es solo valor sugerido/default. | Requisito de Reglas de Oro. Evita que un cambio futuro de precio reescriba la historia. |
-| D4 | **Baja de producto = borrado FÍSICO CONDICIONADO (no existe columna `activo`).** El repository de escritura verifica integridad referencial y solo borra si el producto NO tiene ventas asociadas; si tiene ventas lanza `ConflictError` (409) explicando que no se puede eliminar porque tiene historial de ventas. Prohibido `destroy()` ciego sin verificación previa en todo el codebase. | No hay columna `activo` por schema fijado por el operador. Se preserva el historial: borrar un producto con ventas rompería FK o dejaría huérfanos, por eso la baja se condiciona a no tener ventas. |
+| D4 | **Baja de producto = borrado FÍSICO CONDICIONADO FAIL-CLOSED (no existe columna `activo`).** El repository de escritura DEBE verificar integridad referencial antes de borrar y solo borra si el producto NO tiene ventas asociadas; si tiene ventas lanza `ConflictError` (409) explicando que no se puede eliminar porque tiene historial de ventas. Si la verificación NO puede realizarse (por ejemplo, si la tabla `venta_detalle` no existiera todavía), el borrado NO se ejecuta y el error se propaga. Prohibido `destroy()` ciego sin verificación previa en todo el codebase y prohibido un guard que devuelva "sin historial de ventas" cuando en realidad no pudo verificar (fail-OPEN). | No hay columna `activo` por schema fijado por el operador. Se preserva el historial: borrar un producto con ventas rompería FK o dejaría huérfanos, por eso la baja se condiciona a no tener ventas, y ante duda o fallo de verificación se DENIEGA el borrado (fail-closed), nunca se permite. |
 | D5 | **Sin framework de DI externo. Inyección manual por constructor + único `container.js`. Sin `vue-router`, sin `pinia/vuex`, sin `nestjs/typeorm/mongoose`.** Dependencias backend permitidas: `express, sequelize, mysql2, cors, dotenv`. Frontend: `vue@2, vuetify@2, axios`. | La prueba exige dependencias mínimas y prohíbe esos paquetes. El frontend es una sola vista POS (ventas + productos por tabs de Vuetify), no necesita router ni store global: estado local del componente + capa `api/`. |
+| D6 | **Perímetro de fases y ramas (plan de 5 fases).** `feature/products` entrega SOLO el módulo de productos (capa de datos, repos, service, controller, routes, endpoints y frontend de productos); la ausencia del módulo de ventas en esa rama es intencional y NO es un defecto. `feature/sales` entrega el módulo de ventas completo, incluida la única y obligatoria `sp_registrar_venta`. `ProductionEnv` es la rama donde conviven ambos, creada con merge `--no-ff`. El árbol §3 describe ese estado final integrado, no el alcance de cada rama. | El gate de cada rama se evalúa contra su propio alcance, y el requisito de la prueba técnica del Stored Procedure se cumple y se audita en `feature/sales`, no en `feature/products`. Cierra el falso bloqueante B1 de erika (gate 1). |
 
 **Ambigüedades de la prueba resueltas por la arquitecta (no improvisar):**
 
@@ -43,7 +44,7 @@ HTTP ──> routes (Express Router) ──> controllers ──> services ──
 |------|---------|---------------------|
 | **`routes/`** (Express Router) | Declara `router.get/post/put/delete(patch)`, adjunta middlewares de validación, delega al controller. | ❌ Ninguna lógica de negocio. ❌ Ningún `try/catch` de negocio. ❌ Ningún acceso a service-repository-model directo salvo vía controller. ❌ Ninguna validación inline (va en `middlewares/validate.js`). |
 | **`controllers/`** | Extrae `req.params/query/body`, invoca UN caso de uso del service, traduce resultado a `res.status().json()` y errores de dominio a códigos HTTP (ver §4). Envuelve con `asyncHandler`. | ❌ PROHIBIDO importar `sequelize`, `Sequelize`, `mysql2`, modelos (`require('../models/...')`), o hacer `sequelize.query` / `findAll` / `findByPk` / cualquier query. ❌ PROHIBIDO validar reglas de negocio (existencia, precio ≤ 0, duplicados). Solo validación de forma (tipos/requeridos) delegada al middleware. ❌ PROHIBIDO tocar `req/res` fuera de esta capa (el service jamás recibe `req` ni `res`). |
-| **`services/`** | Contiene los casos de uso (§4). Valida reglas de negocio, orquesta repositories, abre transacciones cuando corresponde, invoca el SP para ventas. Recibe dependencias por constructor. Lanza errores de dominio (`NotFoundError`, `ValidationError`, `ConflictError`). | ❌ PROHIBIDO importar Express (`req/res/next`), Sequelize, o modelos. ❌ PROHIBIDO construir SQL a mano salvo el `CALL` al SP (única excepción, y solo en `VentaService`). ❌ PROHIBIDO instanciar repositories con `new` dentro de métodos (solo vía constructor inyectado desde `container.js`). |
+| **`services/`** | Contiene los casos de uso (§4). Valida reglas de negocio, orquesta repositories, abre transacciones cuando corresponde, invoca el SP para ventas. Recibe dependencias por constructor. Lanza errores de dominio (`NotFoundError`, `ValidationError`, `ConflictError`). | ❌ PROHIBIDO importar Express (`req/res/next`), Sequelize, o modelos. ❌ PROHIBIDO construir SQL a mano salvo el `CALL` al SP (única excepción, y vive solo en `repositories/sequelize-venta-write.repository.js`; el service jamás contiene SQL). ❌ PROHIBIDO instanciar repositories con `new` dentro de métodos (solo vía constructor inyectado desde `container.js`). |
 | **`repositories/`** | Única capa que habla con la BD: usa modelos Sequelize o `sequelize.query` (solo para el SP). Implementa interfaces de `interfaces/` (`ProductoReadRepository`, `ProductoWriteRepository`, `VentaReadRepository`, `VentaWriteRepository`). CRUD de productos + lecturas de ventas. | ❌ PROHIBIDO contener lógica de negocio (no valida existencia/duplicados, no calcula totales, no decide status HTTP). ❌ PROHIBIDO abrir transacciones (la transacción vive en el service o dentro del SP, nunca en el repository). ❌ PROHIBIDO exponer Sequelize al exterior (devuelve objetos planos/entidades, no instancias acopladas si se puede evitar; como mínimo no filtra `req`). |
 | **`models/`** (Sequelize) | Define `Producto`, `Venta`, `VentaDetalle` + asociaciones + migraciones. `Venta/VentaDetalle` son de SOLO LECTURA (no se hace `create` sobre ellos en app). | ❌ PROHIBIDO importar models fuera de `repositories/` y `container.js`. Si un controller/service importa un modelo, el review se rechaza automáticamente. |
 | **`middlewares/`** | `asyncHandler`, `validate` (forma: campos requeridos/tipos), `errorHandler` (mapea error dominio → HTTP). | ❌ PROHIBIDO lógica de negocio. |
@@ -143,11 +144,13 @@ class VentaWriteRepository { async registrarConSP(lineas); } // ÚNICO método d
 ```js
 // container.js — COMPOSITION ROOT, ÚNICO que conoce Sequelize (ILUSTRATIVO)
 const { Sequelize } = require('sequelize');
-const sequelize = require('./config/database'); // única instanciación
-const ProductoModel = require('./models/producto.model')(sequelize);
+const databaseConfig = require('./config/database'); // + appConfig de ./config/app
+const definirModelos = require('./models'); // ./models/index.js → { Producto, Venta, VentaDetalle }
+const sequelize = new Sequelize(configuracionDeBase()); // única instanciación (con guard fail-fast por entorno)
+const { Producto } = definirModelos(sequelize);
 const SequelizeProductoReadRepo = require('./repositories/sequelize-producto-read.repository');
 const ProductoService = require('./services/producto.service');
-const productoReadRepo = new SequelizeProductoReadRepo(ProductoModel);
+const productoReadRepo = new SequelizeProductoReadRepo(Producto);
 const productoService = new ProductoService(productoWriteRepo, productoReadRepo);
 // NINGÚN otro archivo hace `require('sequelize')` ni `require('../models/...')`.
 module.exports = { productoService, ventaService, productoController, ventaController };
@@ -164,13 +167,15 @@ pos-basic-ia/
 ├── docker-compose.yml              # MySQL 8 (imagen mysql:8, puerto 3306, volumen persistente, .env)
 ├── .env.example                    # DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, BACKEND_PORT
 ├── backend/
-│   ├── package.json                # deps permitidas: express, sequelize, mysql2, cors, dotenv (+dev: nodemon)
+│   ├── package.json                # deps permitidas: express, sequelize, mysql2, cors, dotenv (+dev: nodemon, sequelize-cli)
+│   ├── .sequelizerc                # paths CLI: config→src/config/database.js, models→src/models, seeders→src/seeders, migrations→src/migrations
 │   └── src/
 │       ├── app.js                  # crea express, monta routes/, monta errorHandler. NO lógica.
 │       ├── server.js               # listen(). Solo arranca; importa app + container.
 │       ├── container.js            # ★ COMPOSITION ROOT — único que cablea todo (ver §2 DIP)
 │       ├── config/
-│       │   └── database.js         # lee env, exporta instancia Sequelize. Único lugar con `new Sequelize`.
+│       │   ├── app.js              # env + paginación (pagination.maxLimit) que consumen los services
+│       │   └── database.js         # lee env, exporta config por entorno. Único lugar con `new Sequelize` (vía container.js).
 │       ├── routes/
 │       │   ├── producto.routes.js  # router CRUD + búsqueda → ProductoController
 │       │   └── venta.routes.js     # router registrar + listar → VentaController
@@ -185,28 +190,38 @@ pos-basic-ia/
 │       │   ├── sequelize-producto-read.repository.js
 │       │   ├── sequelize-producto-write.repository.js
 │       │   ├── sequelize-venta-read.repository.js
-│       │   └── sequelize-venta-write.repository.js  # ★ ÚNICO archivo con `sequelize.query('CALL sp_registrar_venta...')`
+│       │   ├── sequelize-venta-write.repository.js  # ★ ÚNICO archivo con `sequelize.query('CALL sp_registrar_venta...')` (SET + CALL + SELECT, misma conexión)
+│       │   └── producto-mapper.js  # mapea filas Sequelize → objetos planos de productos
 │       ├── models/
-│       │   ├── producto.model.js
-│       │   ├── venta.model.js          # SOLO LECTURA (no create/update desde app)
-│       │   ├── venta-detalle.model.js  # SOLO LECTURA
-│       │   └── index.js                # asociaciones (Venta hasMany Detalle, etc.)
+│       │   ├── Producto.js         # define tabla `productos` (factory: module.exports = (sequelize) => Model)
+│       │   ├── Venta.js            # SOLO LECTURA (no create/update desde app)
+│       │   ├── VentaDetalle.js     # SOLO LECTURA
+│       │   └── index.js            # definirModelos(sequelize) + asociaciones (Venta hasMany Detalle as items, etc.)
 │       ├── interfaces/
 │       │   ├── producto-read.repository.js
 │       │   ├── producto-write.repository.js
 │       │   ├── venta-read.repository.js
-│       │   └── venta-write.repository.js
-│       └── middlewares/
-│           ├── asyncHandler.js
-│           ├── validate.js             # validación de FORMA (requeridos/tipos)
-│           └── errorHandler.js         # mapea NotFound→404, Validation→400, Conflict→409
+│       │   └── venta-write.repository.js  # UN SOLO método: registrarConSP(lineas)
+│       ├── middlewares/
+│       │   ├── asyncHandler.js
+│       │   ├── validate.js             # validación de FORMA (requeridos/tipos)
+│       │   └── errorHandler.js         # mapea NotFound→404, Validation→400, Conflict→409 (respeta err.status)
+│       ├── errors/
+│       │   ├── domain-errors.js        # NotFoundError, ValidationError, ConflictError
+│       │   └── sp-error.js             # SpError + comoErrorDelSP/comoErrorDeRango (traduce SIGNAL 45000 y errno fuera de rango)
+│       ├── migrations/
+│       │   ├── 20250930000000-create-productos.js
+│       │   └── 20250930000001-create-ventas.js
+│       └── seeders/
+│           └── 20251001000000-catalogo-productos.js  # catálogo inicial idempotente
 ├── frontend/                           # Vue 2 + Vuetify 2 + Axios. SIN vue-router, SIN vuex/pinia.
-│   ├── package.json                    # deps permitidas: vue@2, vuetify@2, axios
+│   ├── package.json                    # deps permitidas: vue@2, vuetify@2, axios (+ scaffold: core-js)
 │   └── src/
 │       ├── main.js                     # bootstrap Vue + Vuetify
-│       ├── App.vue                     # layout único con tabs: [Punto de Venta | Productos | Ventas]
+│       ├── App.vue                     # layout único con tabs: [Productos | Ventas] (Ventas = terminal + historial)
 │       ├── api/                        # ★ CAPA DE ACCESO — único lugar que importa axios / toca URLs
-│       │   ├── http.js                 # instancia axios (baseURL, interceptores)
+│       │   ├── http.js                 # instancia axios (baseURL, interceptores, mensajeDeError)
+│       │   ├── index.js                # barrel: re-exporta http + productos.api + ventas.api (importado por los .vue)
 │       │   ├── productos.api.js        # listar/buscar/crear/actualizar/eliminar → /api/productos
 │       │   └── ventas.api.js           # registrar/listar → /api/ventas
 │       └── components/
@@ -222,7 +237,7 @@ pos-basic-ia/
 
 **Capas del frontend (también respeta capas):** `components/*.vue → api/*.api.js (axios) → backend`. Reglas: ❌ componentes NO contienen lógica de negocio (no calculan totales finales — el total autoritativo lo calcula el SP; el subtotal visible es solo preview); ❌ componentes NO importan `axios` directo ni hardcodean URLs (todo pasa por `api/`); ❌ `api/` NO transforma reglas (solo mapea request/response).
 
-**Migraciones Sequelize:** viven en `backend/database/migrations/` (generadas con `sequelize-cli`, fuera del `src/` de capas pero versionadas). Son fuente autoritativa; `scripts/schema.sql` debe regenerarse tras cada migración.
+**Migraciones Sequelize:** viven en `backend/src/migrations/` (`20250930000000-create-productos.js`, `20250930000001-create-ventas.js`; paths fijados en `backend/.sequelizerc`, seeders en `backend/src/seeders/`). Son fuente autoritativa; `scripts/schema.sql` debe regenerarse tras cada migración.
 
 ---
 
@@ -249,7 +264,7 @@ pos-basic-ia/
 
 ### UC-3 — Registrar venta (carrito → `sp_registrar_venta`)
 *Firma:* `ventaService.registrar(carrito, tipo='normal')` donde `carrito = [{ productoId, cantidad, precioUnitario }]`.
-*Qué hace:* (1) valida forma (carrito no vacío, `cantidad > 0`, `precioUnitario >= 0` — editable, puede ser 0 por cortesía pero nunca negativo); (2) delega a la Strategy del `tipo` para construir `lineas = [{ producto_id, cantidad, precio_unitario }]`; (3) llama `ventaWriteRepo.registrarConSP(lineas)` que ejecuta `CALL sp_registrar_venta(:detalle_json)` — el SP valida que cada producto existe, calcula `subtotal = cantidad * precio_unitario` y el `total`, inserta `ventas + venta_detalle` en UNA transacción, devuelve `p_venta_id` (NO descuenta stock: no existe); (4) re-lee la venta completa vía read repo y la devuelve.
+*Qué hace:* (1) valida forma (carrito no vacío, `cantidad > 0`, `precioUnitario >= 0` — editable, puede ser 0 por cortesía pero nunca negativo); (2) delega a la Strategy del `tipo` para construir `lineas = [{ producto_id, cantidad, precio_unitario }]`; (3) llama `ventaWriteRepo.registrarConSP(lineas)` que ejecuta, sobre UNA misma conexión del pool (`connectionManager.getConnection()` + `releaseConnection` en `finally`): `SET @pos_venta_id = NULL` → `CALL sp_registrar_venta(:detalle_json, @pos_venta_id)` → `SELECT @pos_venta_id AS id` — el SP valida que cada producto existe, calcula `subtotal = ROUND(cantidad * precio_unitario, 2)` y el `total`, inserta `ventas + venta_detalle` en UNA transacción propia autocontenida, devuelve `p_venta_id` (NO descuenta stock: no existe); (4) re-lee la venta completa vía read repo y la devuelve.
 *Devuelve:* `{ id, total, createdAt, items: [{ producto_id, cantidad, precio_unitario, subtotal }] }`.
 *Errores:* `ValidationError` (carrito vacío/cantidades inválidas/tipo desconocido), `NotFoundError` (producto inexistente). Nunca inserta vía ORM.
 *Ruta:* `POST /api/ventas` (201). Body: `{ items: [{ productoId, cantidad, precioUnitario }] }`.
@@ -275,7 +290,7 @@ pos-basic-ia/
 8. [ ] **Precio editable congelado:** ¿el frontend envía `precioUnitario` por línea y el SP lo persiste en `venta_detalle.precio_unitario` con `subtotal = cantidad * precio_unitario`? ¿Nada re-deriva el total desde `productos.precio` después de la venta?
 9. [ ] **Baja física condicionada:** ¿eliminar producto verifica integridad referencial (solo borra si NO tiene ventas, si tiene lanza `ConflictError`/409) y jamás hace `destroy()` ciego sin verificación previa?
 10. [ ] **Validación en dos niveles:** ¿forma (requerido/tipo) en `middlewares/validate.js` y negocio (duplicados, precios) en el service? ¿Sin validación de negocio en controller/middleware ni de forma en el service duplicando?
-11. [ ] **Errores de dominio tipados:** ¿el service lanza `NotFoundError/ValidationError/ConflictError` y `errorHandler` los mapea a 404/400/409? ¿Sin `res.status(500)` manual ni strings mágicos de error en controllers?
+11. [ ] **Errores de dominio tipados:** ¿el service lanza `NotFoundError/ValidationError/ConflictError` y `errorHandler` respeta `err.status` antes de cualquier fallback a 500 (mapea a 404/400/409)? ¿Una ruta inexistente devuelve 404, nunca 500? ¿Sin `res.status(500)` manual ni strings mágicos de error en controllers?
 12. [ ] **Interfaces segregadas implementadas:** ¿los repositories implementan `*Read/*Write` de `interfaces/` y los services dependen del tipo segregado mínimo (lectura no recibe write repo)?
 13. [ ] **OCP verificable:** ¿agregar un tipo de movimiento implica crear una clase en `venta-strategies.js` + registrarla en `container.js`, con CERO cambios en `venta.service.js`?
 14. [ ] **Frontend en capas:** ¿componentes NO importan `axios` ni hardcodean URLs (todo vía `src/api/`)? ¿Sin lógica de negocio (totales autoritativos, descuentos) en `.vue`?
@@ -295,8 +310,10 @@ pos-basic-ia/
 | R6 | Frontend calcula el total autoritativo o llama `axios` directo | Divergencia frontend/SP; URLs desperdigadas; lógica duplicada | `grep -rn "axios\|localhost\|/api/" frontend/src/components` vacío. El total mostrado es preview; el test E2E assert que el total persistido == suma de `precio_unitario*cantidad` del SP. |
 | R7 | Añaden `nestjs/typeorm/mongoose/pinia/vue-router` u otra dependencia no listada | Viola stack fijo de la prueba; infla superficie; rompe DI manual | `backend/package.json` y `frontend/package.json` comparados contra lista blanca D5 en CI. Cualquier diff rechaza. |
 | R8 | `container.js` deja de ser el único composition root (nuevo `new Service` desperdigado) | DIP roto; grafo de dependencias incontrolable | `grep -rn "new .*Service\|new .*Repo\|new Sequelize" backend/src --include="*.js" | grep -v container.js` vacío. |
+| R9 | Alguien reintroduce el fail-OPEN en la baja (guard que devuelve "sin historial" sin haber verificado) | Borra un producto con ventas; rompe historial y FK; viola D4 | Review D4 + §5 punto 9: si la verificación no puede realizarse, el borrado NO se ejecuta y el error se propaga. Prohibido retornar "sin ventas" ante fallo de verificación. |
+| R10 | Alguien lee `feature/products` esperando el módulo de ventas (falso B1) | Gate rechaza una rama correcta por alcance ajeno; ruido de revisión | D6: el gate de cada rama se evalúa contra su propio alcance; ventas y `sp_registrar_venta` solo exigibles en `feature/sales` y `ProductionEnv`; su ausencia en `feature/products` NO es defecto. |
 
-**Plan de rollback (arquitectura, no código):** si durante la implementación una decisión (D1–D5) resulta inviable, NO se improvisa: se pausa el track, se documenta la alternativa en este archivo como `D* (revisión)` con fecha y motivo, y erika re-aprueba antes de continuar. Jamás se cambia el árbol §3 ni las firmas §4 sin actualizar este documento primero.
+**Plan de rollback (arquitectura, no código):** si durante la implementación una decisión (D1–D6) resulta inviable, NO se improvisa: se pausa el track, se documenta la alternativa en este archivo como `D* (revisión)` con fecha y motivo, y erika re-aprueba antes de continuar. Jamás se cambia el árbol §3 ni las firmas §4 sin actualizar este documento primero.
 
 ---
 *Fin del blueprint. — Darjeeling, por Mr. kdh. Que el té nunca se enfríe y las capas nunca se mezclen.*

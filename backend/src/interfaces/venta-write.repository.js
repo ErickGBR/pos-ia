@@ -3,10 +3,11 @@
 /**
  * CONTRATO DE ESCRITURA DE VENTAS — backend/src/interfaces/venta-write.repository.js
  *
- * HUECO PREPARADO para la fase 2 (UC-3: registrar venta).
+ * Contrato de UC-3 (registrar venta). Implementado en
+ * `repositories/sequelize-venta-write.repository.js`.
  *
  * D2 (CRITICO, no negociable): la venta NUNCA se escribe por ORM. La UNICA
- * operacion de escritura de ventas es `registrarConSP`, que internally ejecuta
+ * operacion de escritura de ventas es `registrarConSP`, que internamente ejecuta
  * `CALL sp_registrar_venta(:detalle_json)`: el stored procedure valida los
  * productos, calcula subtotales y total, inserta `ventas` + `venta_detalle` en
  * UNA transaccion y devuelve el id de la venta.
@@ -14,6 +15,10 @@
  * Por eso este contrato tiene UN SOLO metodo y deliberadamente NO expone
  * `crear`, `actualizar` ni `eliminar`: no existe un camino de escritura por
  * modelo que pueda crecer por error ni que diverja de la transaccion del SP.
+ *
+ * El `throw` del cuerpo base es intencional: si la implementacion real no fuera
+ * inyectada por `container.js`, la llamada falla ruidosamente en vez de escribir
+ * algo a medias.
  *
  * PROHIBIDO: imports de Express, del ORM, de modelos o de `config/`.
  */
@@ -26,7 +31,7 @@ class VentaWriteRepository {
    */
   // eslint-disable-next-line no-unused-vars
   async registrarConSP(lineas) {
-    throw new Error('No implementado: reservado para la fase de ventas (UC-3).');
+    throw new Error('La implementacion real la inyecta container.js (contrato, no logica).');
   }
 }
 

@@ -1,0 +1,126 @@
+# ====================================================================
+# CI — POS Basic IA
+#
+# QUÉ CORRE (y sólo esto):
+#   1. Instalación de dependencias: raíz (sin dependencias, sólo valida
+#      package.json), backend/ y frontend/ con `npm ci` (lockfiles exactos).
+#   2. Configuración del .env a partir de .env.example (el .env real nunca
+#      se versiona; el backend lo lee de la raíz del monorepo).
+#   3. Migraciones de Sequelize (`npm run migrate` en backend/) — crea
+#      productos / ventas / venta_detalle en el MySQL del servicio.
+#   4. Instalación del Stored Procedure scripts/sp_registrar_venta.sql,
+#      con verificación posterior de que el procedimiento existe.
+#   5. Build de producción del frontend (`npm run build`).
+#
+# QUÉ NO CORRE (y por qué):
+#   - NO hay paso de tests unitarios: el monorepo NO tiene suite de tests
+#     (ningún package.json declara un script `test`). Inventar un paso que
+#     no comprueba nada sería un CI que pasa sin verificar nada.
+#   - NO hay deploy, NO hay push, NO hay publicación de artefactos.
+#   - NO se usa docker-compose.yml: en CI la base es el `services.db`
+#     de GitHub Actions (misma imagen mysql:8.0, mismo schema).
+#
+# PENDIENTE (honestidad): este workflow todavía no se ejecutó en GitHub
+# Actions (no se hizo push desde la sesión que lo escribió). Lo que sí se
+# verificó localmente, con los mismos comandos:
+#   - npm ci --dry-run en backend/ y frontend/ (lockfiles consistentes)
+#   - npm run migrate (no-op con el esquema ya actualizado)
+#   - la instalación del SP con el cliente mysql contra 127.0.0.1:3307 (exit 0)
+#   - el healthcheck `mysqladmin ping ... --silent` dentro del contenedor (exit 0)
+#   - npm run build del frontend (DONE)
+#
+# NOTA DE PUERTOS: el servicio publica 3307 -> 3306, el mismo criterio que el
+# docker-compose.yml local (el host habla en 3307 y el 3306 es interno del
+# contenedor). Asi el paso del cliente mysql usa exactamente el DB_PORT que
+# deja .env.example, sin depender de ningun 3306 preinstalado en el runner.
+# ====================================================================
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: dependencias + base + build
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: mysql:8.0
+        # Estos valores DEBEN coincidir con los que escribe el paso
+        # "Configurar .env" (DB_USER / DB_NAME / DB_PASSWORD / DB_ROOT_PASSWORD).
+        env:
+          MYSQL_ROOT_PASSWORD: pos_ci_root_pw
+          MYSQL_DATABASE: pos_basic_ia
+          MYSQL_USER: pos_user
+          MYSQL_PASSWORD: pos_ci_app_pw
+          TZ: UTC
+        ports:
+          - 3307:3306
+        # Mismo healthcheck que docker-compose.yml: mysqld respondiendo con
+        # credenciales reales, no sólo el proceso vivo. GitHub Actions espera
+        # a que el servicio esté sano antes de empezar a correr los steps.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ppos_ci_root_pw --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+          --health-start-period=40s
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: "Node.js (engines: node >=18, npm >=9)"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24" # versión con la que se verificó el build localmente
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Dependencias del monorepo (raíz)
+        # La raíz NO tiene dependencias: sólo los scripts db:* de Docker.
+        # El paso sirve para que un package.json de la raíz roto rompa el CI.
+        run: npm install --no-audit --no-fund
+
+      - name: Dependencias del backend
+        working-directory: backend
+        run: npm ci --no-audit --no-fund
+
+      - name: Dependencias del frontend
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Configurar .env
+        # cp de la plantilla + sólo lo que cambia entre entorno local y CI.
+        # DB_HOST/DB_PORT/DB_USER/DB_NAME ya vienen bien en .env.example
+        # (3307 coincide con el mapeo de puertos del servicio).
+        run: |
+          cp .env.example .env
+          sed -i 's/^DB_PASSWORD=.*/DB_PASSWORD=pos_ci_app_pw/' .env
+          sed -i 's/^DB_ROOT_PASSWORD=.*/DB_ROOT_PASSWORD=pos_ci_root_pw/' .env
+          grep -E '^(NODE_ENV|DB_HOST|DB_PORT|DB_NAME|DB_USER|CORS_ORIGIN)=' .env
+
+      - name: Migraciones de Sequelize
+        working-directory: backend
+        run: npm run migrate
+
+      - name: Instalar el Stored Procedure (único write path de ventas)
+        run: |
+          if ! command -v mysql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y mysql-client
+          fi
+          export MYSQL_PWD=pos_ci_app_pw
+          mysql -h 127.0.0.1 -P 3307 -u pos_user pos_basic_ia < scripts/sp_registrar_venta.sql
+          echo "SP instalado:"
+          mysql -h 127.0.0.1 -P 3307 -u pos_user -N \
+            -e "SELECT ROUTINE_NAME, ROUTINE_TYPE FROM information_schema.routines WHERE routine_schema='pos_basic_ia';"
+
+      - name: Build del frontend
+        working-directory: frontend
+        run: npm run build

@@ -32,10 +32,10 @@
             <div class="pa-4 pa-md-6">
               <v-row>
                 <v-col cols="12" lg="7">
-                  <venta-terminal />
+                  <venta-terminal @venta-registrada="revisionVentas += 1" />
                 </v-col>
                 <v-col cols="12" lg="5">
-                  <venta-lista />
+                  <venta-lista :revision="revisionVentas" />
                 </v-col>
               </v-row>
             </div>
@@ -58,11 +58,13 @@
 import ProductoLista from './components/ProductoLista.vue';
 import VentaTerminal from './components/VentaTerminal.vue';
 import VentaLista from './components/VentaLista.vue';
-import { BASE_URL } from './api/http.js';
+import { BASE_URL } from './api';
 
 /**
  * Layout único de la vista POS: header + tabs [Productos | Ventas].
- * Solo orquesta presentación; toda llamada HTTP vive en la capa de acceso (src/api).
+ * Solo orquesta presentación; toda llamada HTTP vive en la capa de acceso.
+ * `revisionVentas` es un simple contador de novedades (no estado de negocio):
+ * al registrar una venta se lo incrementa para que el historial se refresque.
  */
 export default {
   name: 'App',
@@ -70,6 +72,7 @@ export default {
   data: () => ({
     tabActivo: 0,
     baseApi: BASE_URL,
+    revisionVentas: 0,
   }),
 };
 </script>
