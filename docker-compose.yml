@@ -1,0 +1,61 @@
+####################################################################
+# POS Basic IA — Solo infraestructura de base de datos.
+#
+# Uso:
+#   cp .env.example .env    (obligatorio: docker compose lee el .env)
+#   npm run db:up
+#
+# Puerto: el host ya tiene un MariaDB del sistema en 127.0.0.1:3306,
+# por lo que este proyecto publica en 127.0.0.1:3307. El puerto 3306
+# es el puerto INTERNO del contenedor y no debe cambiarse.
+####################################################################
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: pos-basic-ia-db
+    restart: unless-stopped
+
+    environment:
+      # Sin valores hardcodeados: todo sale del .env
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?falta DB_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: ${DB_NAME:?falta DB_NAME en .env}
+      MYSQL_USER: ${DB_USER:?falta DB_USER en .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?falta DB_PASSWORD en .env}
+      TZ: UTC
+
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+    ports:
+      # Bind a 127.0.0.1: no expoongo MySQL a la red local.
+      - "127.0.0.1:${DB_PORT:-3307}:3306"
+
+    volumes:
+      - db_data:/var/lib/mysql
+
+    networks:
+      - pos_net
+
+    healthcheck:
+      # Verifica que mysqld responde de verdad, no solo que el proceso existe.
+      # mysqladmin devuelve ok solo con credenciales validas.
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  db_data:
+    name: pos_basic_ia_db_data
+
+networks:
+  pos_net:
+    name: pos_basic_ia_net
+    driver: bridge
