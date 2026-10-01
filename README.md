@@ -772,7 +772,7 @@ cp .env.example .env
 #### Verificación rápida
 
 ```bash
-curl localhost:3000/api/salud          # -> {"status":"ok"}
+curl localhost:3000/api/health         # -> {"status":"ok"}
 ```
 
 Para el recorrido completo por API (alta, edición, búsqueda, duplicado, baja, venta con total confirmado por el servidor, historial, y los casos de error) ver la [sección 10](#10-cómo-verificar-que-todo-funciona).
