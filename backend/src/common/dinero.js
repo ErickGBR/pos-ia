@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * POLITICA DE REDONDEO DE DINERO — backend/src/services/dinero.js
+ * POLITICA DE REDONDEO DE DINERO — backend/src/common/dinero.js
  *
  * Los precios del POS se manejan con EXACTAMENTE dos decimales: DECIMAL(10,2)
  * en la base, ni uno mas ni uno menos. Este modulo es la unica fuente de verdad

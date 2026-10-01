@@ -12,7 +12,7 @@
  *   `precioUnitario: 1.005` -> se congela como 1.01 (no 1.00).
  *
  * Tres niveles:
- *   1. `redondearADosDecimales` (el helper puro, `src/services/dinero.js`).
+ *   1. `redondearADosDecimales` (el helper puro, `src/common/dinero.js`).
  *   2. `VentaService._validarPrecioUnitario` (el precio que viaja al SP y se
  *      congela en `venta_detalle.precio_unitario`).
  *   3. `ProductoService._validarPrecio` (el precio del catalogo).
@@ -33,21 +33,21 @@
  *
  * El arreglo trabaja sobre ENTEROS de centavos a partir de la representacion
  * decimal corta del numero (`String(1.005) === '1.005'`), nunca sobre el
- * flotante directo. Ver `src/services/dinero.js`.
+ * flotante directo. Ver `src/common/dinero.js`.
  *
  * POLITICA PARA PRECIOS CON MAS DE 2 DECIMALES: SE REDONDEAN (half-up).
  * -------------------------------------------------------------------------
  * No se rechazan. El contrato de la API, el frontend y el SP DECIMAL(10,2)
  * ya estan construidos sobre "esta capa normaliza a 2 decimales"; rechazar
  * cambiaria el contrato publico y romperia flujos que hoy pasan (promociones,
- * precios calculados). Queda documentado en `src/services/dinero.js` y fijado
+ * precios calculados). Queda documentado en `src/common/dinero.js` y fijado
  * en los tests "politica" de abajo.
  */
 
 const VentaService = require('../../src/services/venta.service');
 const ProductoService = require('../../src/services/producto.service');
 const { VentaNormalStrategy } = require('../../src/services/venta-strategies');
-const { redondearADosDecimales } = require('../../src/services/dinero');
+const { redondearADosDecimales } = require('../../src/common/dinero');
 const { CONFIG_DE_PRUEBA, crearVentaReadRepo, crearVentaWriteRepo, crearProductoReadRepo, crearProductoWriteRepo, ventaPersistida } = require('../helpers/fakes');
 
 const STRATEGIES = { normal: new VentaNormalStrategy() };
@@ -145,7 +145,7 @@ describe('GUARD DE REGRESION — redondeo de precios exacto a 2 decimales (half-
     });
 
     it('politica: mas de 2 decimales se REDONDEA, no se rechaza', () => {
-      // Decision documentada en src/services/dinero.js.
+      // Decision documentada en src/common/dinero.js.
       expect(redondearADosDecimales(1.0054)).toBe(1.01);
       expect(redondearADosDecimales(1.0044)).toBe(1);
       expect(redondearADosDecimales(4.299999999)).toBe(4.3);

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * TEST UNITARIO DEL HELPER DE DINERO — backend/tests/services/dinero.test.js
+ * TEST UNITARIO DEL HELPER DE DINERO — backend/tests/common/dinero.test.js
  *
  * Fija la politica de redondeo del POS: EXACTAMENTE 2 decimales, half-up
  * comercial, calculado sobre CENTAVOS ENTEROS y nunca sobre el flotante.
@@ -9,7 +9,7 @@
  * (`Math.round(x * 100) / 100`) salia 1.00 y el POS perdia un centavo.
  */
 
-const { redondearADosDecimales } = require('../../src/services/dinero');
+const { redondearADosDecimales } = require('../../src/common/dinero');
 
 describe('redondearADosDecimales (half-up comercial sobre centavos enteros)', () => {
   it('1.005 redondea a 1.01 y NO a 1.00 (el caso que destapa el bug)', () => {
@@ -51,7 +51,7 @@ describe('redondearADosDecimales (half-up comercial sobre centavos enteros)', ()
   });
 
   it('politica: los precios con MAS de 2 decimales se REDONDEAN (no se rechazan)', () => {
-    // Documentado en src/services/dinero.js. 1.0054 -> 1.01 y 1.0044 -> 1.00:
+    // Documentado en src/common/dinero.js. 1.0054 -> 1.01 y 1.0044 -> 1.00:
     // el tercer decimal decide, sin sorpresas.
     expect(redondearADosDecimales(1.0054)).toBe(1.01);
     expect(redondearADosDecimales(1.0044)).toBe(1);
