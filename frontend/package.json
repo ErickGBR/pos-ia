@@ -1,0 +1,26 @@
+{
+  "name": "pos-basic-ia-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend del POS: vista unica con tabs (Productos / Ventas). Vue 2 + Vuetify 2 + Axios, en capas (components -> api/).",
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build"
+  },
+  "//deps": "Lista blanca D5 de docs/ARQUITECTURA.md. Produccion: vue@2, vuetify@2, axios. Dev: solo toolchain de build (@vue/cli-service 5 + @vue/cli-plugin-babel). PROHIBIDO todo lo demas: nada de router ni store global, sin TypeScript y sin UI kits fuera de Vuetify.",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "core-js": "^3.37.1",
+    "vue": "^2.7.16",
+    "vuetify": "^2.7.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.7",
+    "@vue/cli-plugin-babel": "~5.0.8",
+    "@vue/cli-service": "~5.0.8",
+    "vue-template-compiler": "^2.7.16"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

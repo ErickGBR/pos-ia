@@ -1,0 +1,66 @@
+/* =====================================================================
+   Material Design Icons — subconjunto local (solo los glifos que usa la app)
+   ---------------------------------------------------------------------
+   Motivo: Vuetify 2 usa el iconfont MDI por defecto pero NO lo empaqueta.
+   Se vendoriza el .woff2 en public/fonts/ en vez de enlazar un CDN:
+   - frontend/package.json queda estrictamente dentro de la lista blanca D5
+     (vue@2, vuetify@2, axios + toolchain): no se agrega ninguna dependencia.
+   - El build queda autocontenido y funciona sin conexión.
+   Si se usa un ícono nuevo, agregar su regla acá (código tomado del CSS
+   oficial de @mdi/font 7.4.47) y verificar que el glifo exista en la fuente.
+   ===================================================================== */
+
+@font-face {
+  font-family: "Material Design Icons";
+  src: url("../fonts/materialdesignicons-webfont.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.mdi:before,
+.mdi-set {
+  display: inline-block;
+  font: normal normal normal 24px/1 "Material Design Icons";
+  font-size: inherit;
+  text-rendering: auto;
+  line-height: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Glifos en uso (componentes de la app) ───────────────────────────── */
+.mdi-storefront::before { content: "\F07C7"; }
+.mdi-package-variant-closed::before { content: "\F03D7"; }
+.mdi-cash-register::before { content: "\F0CF4"; }
+.mdi-package-variant::before { content: "\F03D6"; }
+.mdi-cart-outline::before { content: "\F0111"; }
+.mdi-receipt::before { content: "\F0824"; }
+.mdi-file-document-outline::before { content: "\F09EE"; }
+.mdi-plus::before { content: "\F0415"; }
+.mdi-magnify::before { content: "\F0349"; }
+.mdi-magnify-remove-outline::before { content: "\F120D"; }
+.mdi-pencil::before { content: "\F03EB"; }
+.mdi-delete-outline::before { content: "\F09E7"; }
+.mdi-alert-circle-outline::before { content: "\F05D6"; }
+
+/* ── Glifos internos de Vuetify 2 ($vuetify.icons + controles) ───────── */
+.mdi-alert::before { content: "\F0026"; }                 /* v-alert type=error/warning */
+.mdi-check-circle::before { content: "\F05E0"; }          /* v-alert type=success */
+.mdi-information::before { content: "\F02FC"; }           /* v-alert type=info */
+.mdi-exclamation::before { content: "\F0205"; }
+.mdi-close::before { content: "\F0156"; }                 /* cierre general */
+.mdi-close-circle::before { content: "\F0159"; }          /* v-text-field clearable */
+.mdi-chevron-left::before { content: "\F0141"; }          /* v-pagination prev */
+.mdi-chevron-right::before { content: "\F0142"; }         /* v-pagination next */
+.mdi-chevron-down::before { content: "\F0140"; }
+.mdi-menu-down::before { content: "\F035D"; }             /* v-select */
+.mdi-menu::before { content: "\F035C"; }
+.mdi-cached::before { content: "\F00E8"; }                /* estados de carga */
+.mdi-check::before { content: "\F012C"; }
+.mdi-minus::before { content: "\F0374"; }
+.mdi-circle::before { content: "\F0765"; }
+.mdi-arrow-up::before { content: "\F005D"; }
+.mdi-unfold-more-horizontal::before { content: "\F054F"; } /* orden de tabla */
+.mdi-page-first::before { content: "\F0600"; }
+.mdi-page-last::before { content: "\F0601"; }
