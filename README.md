@@ -643,11 +643,15 @@ Esta sección describe el proceso real de desarrollo: con qué herramientas de I
 
 ### 13.1 Tecnologías de IA
 
-| Herramienta | Para qué se usó |
-| --- | --- |
-| **Claude** (agente orquestador y subagentes especializados) | Planificación, decisiones de arquitectura, implementación por capas y revisión de código. |
-| **OpenCode** | Entorno de ejecución de los agentes: lectura/escritura de archivos, shell, git y conexión con las herramientas de verificación. |
-| **Playwright** | Verificación automatizada en navegador: carga de la SPA, recorrido de los flujos y capturas como evidencia. Los artefactos `.playwright-mcp/` que dejó esa verificación están en `.gitignore` y **no** se versionan. |
+| Herramienta | Modelos | Para qué se usó |
+| --- | --- | --- |
+| **Claude** (agente orquestador y subagentes especializados) | **Opus 5.4** (orquestación y decisiones de arquitectura) · **Sonnet 5** (implementación por capas) · **Haiku** (tareas mecánicas y verificación rápida) | Planificación, decisiones de arquitectura, implementación por capas y revisión de código. |
+| **OpenCode** | **Big Pickle** (orquestación, backend, code review, QA) · **MiMo v2.6 Flash** (frontend, workers, UI/UX) · **Ling 3.0 Flash** (memoria, seguridad, performance) · **Muse Spark 1.3** (arquitectura, DevOps, documentación) · **Nemotron 3 Ultra** (seguridad, datos) | Entorno de ejecución de los agentes: lectura/escritura de archivos, shell, git y conexión con las herramientas de verificación. |
+| **Playwright** | — | Verificación automatizada en navegador: carga de la SPA, recorrido de los flujos y capturas como evidencia. Los artefactos `.playwright-mcp/` que dejó esa verificación están en `.gitignore` y **no** se versionan. |
+| **Engram** (plugin MCP) | — | Memoria persistente entre sesiones: registra decisiones de arquitectura, hallazgos y correcciones para que el trabajo no se pierda al cambiar de agente o de contexto. |
+| **Graffle / Graphify** | — | Diagramación y visualización del grafo de dependencias del proyecto para entender el mapa de módulos y sus relaciones. |
+
+Las instrucciones de trabajo que rigen a los agentes viven en dos archivos de la raíz: **`AGENTS.md`** (estándar abierto, compartido por cualquier herramienta) y **`CLAUDE.md`** (específico de Claude Code). Ambos son la fuente de verdad de las reglas del proyecto.
 
 Tecnologías del proyecto en sí (no son IA): **Node.js · Express · Sequelize · MySQL 8 con Stored Procedures · Vue 2 · Vuetify · Axios · Docker Compose** — el stack completo, con versiones, está en la sección [3](#3-stack-y-versiones-exactas).
 
