@@ -3,7 +3,7 @@
  *
  * Contratos (docs/ARQUITECTURA.md §4, UC-3 y UC-4):
  *   POST /api/ventas             body { items: [{ productoId, cantidad, precioUnitario }] } -> 201
- *                                -> { id, total, createdAt, items: [{ producto_id, cantidad, precio_unitario, subtotal }] }
+ *                                -> { id, total, createdAt, items: [{ producto_id, nombre, cantidad, precio_unitario, subtotal }] }
  *   GET  /api/ventas?page=&limit= -> 200 { data: [{ id, total, createdAt, items }], meta: { total, page, limit } }
  *   GET  /api/ventas/:id          -> 200 venta completa con sus líneas
  *
@@ -27,8 +27,10 @@ import http from './http';
  * @param {Array<{productoId: number|string, cantidad: number, precioUnitario: number}>} items
  *   líneas del carrito; cantidad > 0 y precioUnitario >= 0 (0 = cortesía, nunca negativo)
  * @returns {Promise<{id: number, total: number, createdAt: string,
- *   items: Array<{producto_id: number, cantidad: number, precio_unitario: number, subtotal: number}>}>}
- *   la venta tal como la confirmó el servidor (201)
+ *   items: Array<{producto_id: number, nombre: string|null, cantidad: number,
+ *   precio_unitario: number, subtotal: number}>}>}
+ *   la venta tal como la confirmó el servidor (201); `nombre` es null si el
+ *   producto ya no existe en el catálogo
  */
 export function registrar(items) {
   return http.post('/ventas', { items }).then((respuesta) => respuesta.data);

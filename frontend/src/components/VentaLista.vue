@@ -168,7 +168,7 @@
                 <tbody>
                   <tr v-for="(linea, indice) in detalleLineas" :key="indice">
                     <td class="text-left">
-                      <span class="font-weight-medium">Producto {{ linea.producto_id }}</span>
+                      <span class="font-weight-medium">{{ nombreLinea(linea) }}</span>
                     </td>
                     <td class="text-right">{{ linea.cantidad }}</td>
                     <td class="text-right">{{ formatearPrecio(linea.precio_unitario) }}</td>
@@ -385,6 +385,27 @@ export default {
     cantidadLineas(venta) {
       if (Array.isArray(venta.items)) return venta.items.length;
       return '—';
+    },
+
+    /**
+     * Etiqueta de producto para el ticket.
+     *
+     * El backend (LEFT JOIN contra `productos`) devuelve `nombre`, pero puede
+     * venir `null` si el producto ya no existe o el dato es viejo: en ese caso
+     * caemos a un texto legible con el id, y nunca a "Producto undefined".
+     *
+     * @param {{nombre?: string|null, producto_id?: number|string}} linea
+     * @returns {string}
+     */
+    nombreLinea(linea) {
+      const nombre = linea && typeof linea.nombre === 'string' ? linea.nombre.trim() : '';
+      if (nombre) return nombre;
+
+      const id = linea ? linea.producto_id : null;
+      if (id !== undefined && id !== null && String(id).trim() !== '') {
+        return `Producto #${id}`;
+      }
+      return 'Producto sin nombre';
     },
 
     formatearPrecio(valor) {
