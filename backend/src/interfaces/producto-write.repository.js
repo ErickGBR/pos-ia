@@ -49,12 +49,15 @@ class ProductoWriteRepository {
    * Verificacion de integridad referencial previa a la baja fisica (D4).
    * Responde: "este producto aparece en alguna venta?" NO decide ni borra.
    *
-   * Debe degradar a `false` (no tiene ventas) cuando las tablas de ventas todavia
-   * no existen, para que la baja de productos funcione en la fase 1 y empiece
-   * a proteger historial automaticamente en la fase de ventas, sin cambiar el
-   * service.
+   * FAIL-CLOSED obligatorio: si la verificacion NO puede realizarse (tabla
+   * `venta_detalle` inexistente, indice/SP ausente, falta de permisos, caida de
+   * la base), la implementacion DEBE lanzar y propagar el error. NUNCA debe
+   * responder `0` ni degradar el conteo: un `0` devuelto por un fallo significaria
+   * "no tiene historial" y habilitaria un borrado a ciego, prohibido por D4.
+   * Ante la duda, no se borra.
    * @param {number} id
    * @returns {Promise<number>} cantidad de ventas asociadas (0 = sin historial)
+   * @throws {Error} si la verificacion no pudo ejecutarse (fail-closed)
    */
   // eslint-disable-next-line no-unused-vars
   async contarVentasAsociadas(id) {

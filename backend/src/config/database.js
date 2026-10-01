@@ -37,12 +37,51 @@ function entero(valor, porDefecto) {
 
 /** Configuracion de MySQL. Se indexa por entorno porque asi la exige sequelize-cli. */
 const config = {
+  /**
+   * Desarrollo local (Docker, `docker-compose.yml`): UNICO bloque con
+   * credenciales de ejemplo, para que `npm run migrate` y el server arranquen
+   * sin tocar nada. Estas credenciales viven solo en el compose local.
+   */
   development: {
     username: process.env.DB_USER || 'pos_user',
     password: process.env.DB_PASSWORD || 'PosApp_2024_local',
     database: process.env.DB_NAME || 'pos_basic_ia',
     host: process.env.DB_HOST || '127.0.0.1',
     port: entero(process.env.DB_PORT, 3307),
+    ...ajustesComunes(),
+  },
+
+  /**
+   * Produccion: SOLO variables de entorno, sin NINGUN fallback.
+   *
+   * Antes no existia este bloque: `NODE_ENV=production` hacia que
+   * `databaseConfig[entorno]` fuera `undefined`, el `|| development` de
+   * `container.js` lo tapaba, el `if (!config) throw` nunca se disparaba y
+   * `new Sequelize(undefined)` reventaba en el arranque con un TypeError
+   * inentendible (hallazgo A1).
+   *
+   * Se eligio "fail-fast con mensaje accionable" y no "defaults de produccion"
+   * porque este repo es una prueba tecnica PUBLICA: aqui NO pueden vivir
+   * credenciales reales, y un fallback silencioso al bloque `development`
+   * significaria que un deploy apuntaria por suerte a la base local. Si falta
+   * una variable, `container.js` corta el arranque indicando cual es.
+   */
+  production: {
+    username: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    host: process.env.DB_HOST,
+    port: entero(process.env.DB_PORT, 3307),
+    ...ajustesComunes(),
+  },
+};
+
+/**
+ * Ajustes identicos en TODOS los entornos (dialecto, zona horaria, pool).
+ * @returns {Object}
+ */
+function ajustesComunes() {
+  return {
     dialect: 'mysql',
     logging: false,
     timezone: process.env.DB_TIMEZONE || '-03:00',
@@ -60,7 +99,7 @@ const config = {
       acquire: 30000,
       idle: 10000,
     },
-  },
-};
+  };
+}
 
 module.exports = config;

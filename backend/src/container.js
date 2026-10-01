@@ -38,10 +38,35 @@ const entorno = appConfig.env;
 
 /** @returns {Object} bloque de configuracion del entorno activo */
 function configuracionDeBase() {
-  const config = databaseConfig[entorno] || databaseConfig.development;
+  const config = databaseConfig[entorno];
+
+  // FAIL-FAST, sin fallback a `development` (hallazgo A1). Antes decia
+  // `databaseConfig[entorno] || databaseConfig.development`, asi que con
+  // NODE_ENV=production el `||` entregaba el bloque de desarrollo, el
+  // `if (!config) throw` nunca se disparaba y el arranque moria despues,
+  // dentro de `new Sequelize(undefined)`, con un TypeError inentendible.
+  // Un deploy tiene que morir ACA, nombrando el entorno y diciendo que tocar.
   if (!config) {
-    throw new Error('No hay configuracion de base de datos para el entorno "' + entorno + '".');
+    throw new Error(
+      'No hay configuracion de base de datos para el entorno "' + entorno + '". ' +
+      'Entornos disponibles: ' + Object.keys(databaseConfig).join(', ') + '. ' +
+      'Defini el bloque en src/config/database.js o ajusta NODE_ENV.',
+    );
   }
+
+  // El bloque existe pero viene incompleto (p.ej. `production` sin DB_HOST,
+  // DB_USER ni DB_NAME en el .env): mismo criterio, cortar antes de que
+  // Sequelize intente conectar con `undefined` y devuelva un error opaco.
+  const variables = { host: 'DB_HOST', username: 'DB_USER', database: 'DB_NAME' };
+  const faltantes = Object.keys(variables).filter((campo) => !config[campo]);
+  if (faltantes.length > 0) {
+    throw new Error(
+      'Configuracion de base de datos incompleta para el entorno "' + entorno + '": ' +
+      'faltan ' + faltantes.map((campo) => variables[campo]).join(', ') + '. ' +
+      'Definilas en el .env de la raiz del monorepo (ver .env.example).',
+    );
+  }
+
   return config;
 }
 

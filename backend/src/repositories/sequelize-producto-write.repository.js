@@ -15,6 +15,8 @@
  *     producto tiene historial y `eliminar` borra. `eliminar` es el UNICO
  *     `destroy()` del codebase y su unica llamada real esta precedida por esa
  *     verificacion, que hace el `ProductoService` (R5).
+ *     Esa verificacion es FAIL-CLOSED: si no puede ejecutarse, el error
+ *     propaga y NO hay borrado (nunca se responde "0" por fallar).
  *
  * Sin logica de negocio: la DECISION de borrar o rechazar con 409 la toma el
  * service. Aqui solo se responden preguntas de datos y se traduce el rechazo de
@@ -27,9 +29,6 @@
 const ProductoWriteRepository = require('../interfaces/producto-write.repository');
 const { productoAPlano } = require('./producto-mapper');
 const { ConflictError } = require('../errors/domain-errors');
-
-/** Tabla de detalle de ventas: donde vive la FK hacia `productos`. */
-const TABLA_VENTA_DETALLE = 'venta_detalle';
 
 /**
  * Traduce el rechazo de unicidad de MySQL a error de dominio.
@@ -111,36 +110,43 @@ class SequelizeProductoWriteRepository extends ProductoWriteRepository {
    * Verificacion de integridad referencial de D4: cuenta las lineas de venta que
    * apuntan al producto.
    *
-   * Fase 1 (sin `venta_detalle`): la tabla aun no existe y MySQL responde
-   * ER_NO_SUCH_TABLE. Se degrada a 0 en vez de romper la baja, para que los
-   * productos se puedan eliminar mientras el modulo de ventas no existe. En la
-   * fase de ventas la tabla aparecera y esta misma consulta empezara a devolver
-   * el conteo real, sin tocar el service ni el controller.
+   * FAIL-CLOSED (D4): si la verificacion NO puede realizarse —tabla
+   * `venta_detalle` inexistente, SP/indice ausente, falta de permisos, caida de
+   * la base— el error PROPAGA tal cual llega desde el driver y el `eliminar`
+   * jamas se ejecuta. No hay red de seguridad que degrade el conteo a 0: un 0
+   * implicito significaria "no tiene historial" y habilitaria un `destroy()`
+   * a ciego, que D4 prohibe. Mejor un 500 visible que una venta borrada.
+   *
+   * Tampoco se traduce a un error de dominio: la jerarquia de
+   * `errors/domain-errors.js` modela reglas de negocio (404/400/409) y un fallo
+   * de infraestructura no es ninguna de ellas. Se propaga y `errorHandler` lo
+   * responde como 500 (clase de error generica, sin estado de la base).
+   *
+   * El nombre de la tabla va LITERAL en la sentencia y no concatenado: MySQL
+   * solo acepta placeholders para VALORES (`:id`), nunca para identificadores,
+   * y concatenar un identificador es el patron tipico de una SQL injection.
+   * `venta_detalle` sale del schema fijado en docs/ARQUITECTURA.md §0.1 (no es
+   * dato de usuario ni configurable), y asi `replacements:` queda reservado
+   * exclusivamente para el parametro, igual que en el resto del repo.
    * @param {number} id
    * @returns {Promise<number>} ventas asociadas (0 = sin historial)
+   * @throws {Error} si la verificacion no pudo ejecutarse (fail-closed)
    */
   async contarVentasAsociadas(id) {
-    const sql = 'SELECT COUNT(*) AS total FROM `' + TABLA_VENTA_DETALLE + '` WHERE producto_id = :id';
-    try {
-      const [filas] = await this.sequelize.query(sql, {
-        replacements: { id },
-        type: this.sequelize.constructor.QueryTypes.SELECT,
-      });
-      return Number(filas.total) || 0;
-    } catch (error) {
-      const codigo = error && (error.parent ? error.parent.code : error.code);
-      if (codigo === 'ER_NO_SUCH_TABLE' || codigo === 'ER_BAD_TABLE_ERROR') {
-        return 0; // fase 1: todavia no existe el detalle de ventas
-      }
-      throw error;
-    }
+    const sql = 'SELECT COUNT(*) AS total FROM `venta_detalle` WHERE producto_id = :id';
+    const [filas] = await this.sequelize.query(sql, {
+      replacements: { id },
+      type: this.sequelize.constructor.QueryTypes.SELECT,
+    });
+    return Number(filas.total) || 0;
   }
 
   /**
    * @inheritdoc
    * UNICO `destroy()` del codebase. No re-verifica historial: la regla la aplico
    * el `ProductoService` llamando antes a `contarVentasAsociadas`, que corta con
-   * 409 sin llegar aca si el producto tiene ventas (D4 / R5).
+   * 409 sin llegar aca si el producto tiene ventas, y que PROPAGA el error (sin
+   * borrar) si la verificacion no pudo hacerse (D4 / R5, fail-closed).
    * @param {number} id
    * @returns {Promise<number>} filas afectadas
    */

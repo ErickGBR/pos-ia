@@ -26,8 +26,13 @@ const { NotFoundError, ValidationError, ConflictError } = require('../errors/dom
 /** Precio maximo admitido por la columna DECIMAL(10,2). */
 const PRECIO_MAXIMO = 99999999.99;
 
-/** Techo de `limit` para no dejar que un cliente pida la tabla entera. */
-const LIMIT_MAXIMO = 100;
+/**
+ * Techo de `limit` SOLO como ultimo recurso: la fuente de verdad es
+ * `config/app.js -> pagination.maxLimit`, que `container.js` inyecta por
+ * constructor. Este valor se usa unicamente si el service se construye sin
+ * config (p.ej. un test aislado) o si la config trae algo no numerico.
+ */
+const LIMIT_MAXIMO_POR_DEFECTO = 100;
 
 class ProductoService {
   /**
@@ -40,6 +45,13 @@ class ProductoService {
     this.read = productoReadRepo;
     this.write = productoWriteRepo;
     this.paginacion = config.pagination || {};
+
+    // Unica fuente de verdad del techo de `limit` (antes estaba hardcodeado
+    // aca y tambien en `config/app.js`, con dos numeros que podian divergir).
+    const maxLimit = Number(this.paginacion.maxLimit);
+    this.maxLimit = Number.isInteger(maxLimit) && maxLimit > 0
+      ? maxLimit
+      : LIMIT_MAXIMO_POR_DEFECTO;
   }
 
   // ---------------------------------------------------------------- UC-1 ---
@@ -290,9 +302,9 @@ class ProductoService {
         limit: 'debe ser un entero >= 1',
       });
     }
-    if (limit > LIMIT_MAXIMO) {
-      throw new ValidationError('El parametro limit no puede superar ' + LIMIT_MAXIMO + '.', {
-        limit: 'maximo ' + LIMIT_MAXIMO,
+    if (limit > this.maxLimit) {
+      throw new ValidationError('El parametro limit no puede superar ' + this.maxLimit + '.', {
+        limit: 'maximo ' + this.maxLimit,
       });
     }
 

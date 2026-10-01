@@ -6,6 +6,7 @@
  * UNICO lugar del backend que decide que respuesta HTTP sale a la calle. Mapea
  * los errores de dominio del service a su codigo:
  *
+ *   `err.status` explicito y valido (400..599) -> ese mismo status (manda primero)
  *   NotFoundError   -> 404
  *   ValidationError -> 400
  *   ConflictError   -> 409
@@ -32,10 +33,24 @@ const CODIGOS_POR_ERROR = new Map([
 
 /**
  * Determina el status HTTP de un error.
+ *
+ * Orden: primero un `err.status` explicito y valido (400..599), despues el
+ * mapeo por constructor y por ultimo 500. Sin esa primera regla, un 404 armado
+ * a mano (catch-all de rutas inexistente en `app.js`) caia al Map por
+ * constructor, no encontraba coincidencia y salia como 500.
  * @param {Error} error
  * @returns {number}
  */
 function statusDe(error) {
+  // Quien setea `err.status` ya decidio el codigo HTTP (el catch-all de
+  // `app.js` con 404, o los errores de parseo de Express con 400/413). Se
+  // respeta ese valor mientras sea un status HTTP real; cualquier otra cosa
+  // (`status` de texto, 0, 1000...) se ignora y sigue el mapeo normal.
+  const statusExplicito = error ? error.status : undefined;
+  if (Number.isInteger(statusExplicito) && statusExplicito >= 400 && statusExplicito <= 599) {
+    return statusExplicito;
+  }
+
   const porTipo = CODIGOS_POR_ERROR.get(error.constructor);
   if (porTipo) return porTipo;
   if (error instanceof DomainError) return 500;
