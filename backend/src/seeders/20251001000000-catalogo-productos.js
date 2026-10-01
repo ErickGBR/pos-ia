@@ -31,14 +31,40 @@
 
 /** Catalogo de ejemplo. `codigo_barras` con prefijo `SEED-` para poder borrarlo. */
 const PRODUCTOS = [
-  { nombre: 'Gomita de Frutas', precio: 2.5, codigo_barras: 'SEED-GOM-001' },
-  { nombre: 'Agua Mineral 500ml', precio: 1.1, codigo_barras: 'SEED-AGUA-001' },
-  { nombre: 'Cafe Instantaneo', precio: 12.75, codigo_barras: 'SEED-CAFE-001' },
-  { nombre: 'Galletas de Avena', precio: 4.3, codigo_barras: 'SEED-GALL-001' },
-  { nombre: 'Papel Higienico', precio: 8.9, codigo_barras: 'SEED-PAPE-001' },
-  { nombre: 'Jabon de Manos', precio: 6.25, codigo_barras: 'SEED-JABO-001' },
+  // Bebidas
+  { nombre: 'Agua Mineral 500ml', precio: 1.10, codigo_barras: 'SEED-AGUA-001' },
+  { nombre: 'Coca-Cola 600ml', precio: 2.50, codigo_barras: 'SEED-COCA-001' },
+  { nombre: 'Jugo de Naranja 1L', precio: 3.20, codigo_barras: 'SEED-JUGO-001' },
+  { nombre: 'Cafe Instantaneo 100g', precio: 12.75, codigo_barras: 'SEED-CAFE-001' },
   { nombre: 'Leche Entera 1L', precio: 2.15, codigo_barras: 'SEED-LECH-001' },
-  { nombre: 'Arroz Grano Largo', precio: 15.4, codigo_barras: 'SEED-ARRO-001' },
+  { nombre: 'Yogurt Natural 150g', precio: 1.80, codigo_barras: 'SEED-YOGU-001' },
+  { nombre: 'Gaseosa Naranja 2L', precio: 2.80, codigo_barras: 'SEED-GASO-001' },
+
+  // Alimentos basicos
+  { nombre: 'Arroz Grano Largo 1kg', precio: 15.40, codigo_barras: 'SEED-ARRO-001' },
+  { nombre: 'Frijoles Negros 1kg', precio: 18.90, codigo_barras: 'SEED-FRIJ-001' },
+  { nombre: 'Azucar Refinada 1kg', precio: 12.50, codigo_barras: 'SEED-AZUC-001' },
+  { nombre: 'Harina de Trigo 1kg', precio: 10.80, codigo_barras: 'SEED-HARI-001' },
+  { nombre: 'Aceite Vegetal 1L', precio: 22.30, codigo_barras: 'SEED-ACEI-001' },
+  { nombre: 'Sal de Mesa 500g', precio: 1.20, codigo_barras: 'SEED-SAL-001' },
+  { nombre: 'Pasta Espagueti 500g', precio: 8.90, codigo_barras: 'SEED-PAST-001' },
+
+  // Snacks y dulces
+  { nombre: 'Gomita de Frutas', precio: 2.50, codigo_barras: 'SEED-GOM-001' },
+  { nombre: 'Galletas de Avena', precio: 4.30, codigo_barras: 'SEED-GALL-001' },
+  { nombre: 'Papas Fritas 150g', precio: 3.50, codigo_barras: 'SEED-PAPA-001' },
+  { nombre: 'Chocolate con Leche 100g', precio: 4.80, codigo_barras: 'SEED-CHOC-001' },
+  { nombre: 'Almendras Tostadas 100g', precio: 7.90, codigo_barras: 'SEED-ALME-001' },
+
+  // Panaderia
+  { nombre: 'Pan de Molde Integral', precio: 5.50, codigo_barras: 'SEED-PANM-001' },
+  { nombre: 'Tortillas de Maiz 20u', precio: 3.80, codigo_barras: 'SEED-TORT-001' },
+
+  // Limpieza e higiene
+  { nombre: 'Papel Higienico 4 rollos', precio: 8.90, codigo_barras: 'SEED-PAPE-001' },
+  { nombre: 'Jabon de Manos 250ml', precio: 6.25, codigo_barras: 'SEED-JABO-001' },
+  { nombre: 'Detergente Liquido 1L', precio: 14.50, codigo_barras: 'SEED-DETE-001' },
+  { nombre: 'Desinfectante Multiusos 500ml', precio: 9.90, codigo_barras: 'SEED-DESI-001' },
 ];
 
 /** Prefijo que marca los productos de este seeder (para el `seed:undo`). */
