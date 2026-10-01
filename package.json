@@ -3,18 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "POS (Point of Sale) - API y aplicacion web. Node.js + Express + Sequelize / Vue 2 + Vuetify / MySQL 8",
-  "main": "src/server.js",
   "engines": {
     "node": ">=18",
     "npm": ">=9"
   },
+  "//": "D1 (docs/ARQUITECTURA.md): monorepo. Cada app tiene su propio package.json y sus propias dependencias. La raiz NO tiene dependencias de aplicacion: solo orquesta la infraestructura MySQL 8 de Docker. Ver backend/package.json y frontend/package.json.",
+  "//scripts": "Aqui viven SOLO los scripts de infraestructura (docker). Los scripts de la API (start/dev/migrate/seed) viven en backend/package.json; los del frontend (serve/build) en frontend/package.json.",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "migrate": "sequelize-cli db:migrate",
-    "migrate:undo": "sequelize-cli db:migrate:undo",
-    "migrate:status": "sequelize-cli db:migrate:status",
-    "seed": "sequelize-cli db:seed:all",
     "db:up": "docker compose up -d db",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f db"
@@ -26,17 +21,5 @@
     "vue",
     "mysql"
   ],
-  "license": "MIT",
-  "//deps": "Lista blanca D5 de docs/ARQUITECTURA.md: express, sequelize, mysql2, cors, dotenv (+dev: nodemon). sequelize-cli es obligatorio porque las migraciones se generan con el (ver seccion de migraciones).",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.0",
-    "mysql2": "^3.11.3",
-    "sequelize": "^6.37.3"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.7",
-    "sequelize-cli": "^6.6.2"
-  }
+  "license": "MIT"
 }

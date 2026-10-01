@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="POS Básico">
+  <rect width="64" height="64" rx="12" fill="#1976d2" />
+  <path d="M14 18h6l4 22h20l4-14H24" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="27" cy="47" r="3.5" fill="#ffffff" />
+  <circle cx="43" cy="47" r="3.5" fill="#ffffff" />
+</svg>
