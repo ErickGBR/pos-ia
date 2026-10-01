@@ -22,6 +22,7 @@
  */
 
 const { NotFoundError, ValidationError, ConflictError } = require('../errors/domain-errors');
+const { redondearADosDecimales } = require('./dinero');
 
 /** Precio maximo admitido por la columna DECIMAL(10,2). */
 const PRECIO_MAXIMO = 99999999.99;
@@ -255,8 +256,12 @@ class ProductoService {
         precio: 'excede el maximo permitido',
       });
     }
-    // DECIMAL(10,2): 2 decimales.
-    return Math.round(numero * 100) / 100;
+    // DECIMAL(10,2): 2 decimales, EXACTOS, half-up comercial sobre centavos
+    // enteros (ver `services/dinero.js`). Mismo criterio que el precio congelado
+    // en `venta.service.js -> _validarPrecioUnitario`, para que el catalogo y el
+    // ticket no puedan divergir. Politica: los precios con mas de 2 decimales se
+    // REDONDEAN (no se rechazan).
+    return redondearADosDecimales(numero);
   }
 
   /**

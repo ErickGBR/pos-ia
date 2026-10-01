@@ -34,6 +34,7 @@ const {
   PayloadTooLargeError,
 } = require('../errors/domain-errors');
 const { SpError, ERNO_FUERA_DE_RANGO } = require('../errors/sp-error');
+const { redondearADosDecimales } = require('./dinero');
 
 /** Precio maximo admitido por la columna DECIMAL(10,2). */
 const PRECIO_MAXIMO = 99999999.99;
@@ -347,7 +348,17 @@ class VentaService {
 
     // DECIMAL(10,2): el SP redondea el subtotal a 2 decimales, asi que el precio se
     // manda ya redondeado para que lo que se ve y lo que se guarda coincidan.
-    return Math.round(precio * 100) / 100;
+    //
+    // El redondeo es EXACTO a 2 decimales, half-up comercial, sobre centavos
+    // enteros (ver `services/dinero.js`). NO usar `Math.round(precio * 100) / 100`:
+    // en coma flotante 1.005 * 100 es 100.49999999999999 y el precio quedaba en
+    // 1.00 en vez de 1.01, perdiendo un centavo por linea.
+    //
+    // Precios con MAS de 2 decimales: SE REDONDEAN (half-up), no se rechazan.
+    // Es la politica documentada en `services/dinero.js`: el contrato de la API,
+    // el frontend y el SP ya asumen que esta capa normaliza a 2 decimales, y
+    // rechazar romperia flujos que hoy pasan. 1.0054 -> 1.01, 1.0044 -> 1.00.
+    return redondearADosDecimales(precio);
   }
 
   /**
