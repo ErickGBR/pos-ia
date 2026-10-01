@@ -138,6 +138,36 @@ const appConfig = {
     defaultLimit: 20,
     maxLimit: 100,
   },
+
+  /**
+   * Reglas de recurso por caso de uso, que el service lee de la config que le
+   * inyecta `container.js` (no del entorno: R1 lo prohibe).
+   */
+  ventas: {
+    /**
+     * Tope de lineas de venta que acepta un carrito (hallazgo M-01, severidad
+     * MEDIA: DoS / agotamiento de recursos).
+     *
+     * POR QUE 100 y no un numero magico en el service: sin tope, un cliente
+     * manda 10.000 items y el costo es lineal en tres puntos a la vez — el
+     * `JSON.parse` de Express, el `.map` de validacion del service y el cursor
+     * `JSON_TABLE` del SP — y la transaccion del SP queda abierta durante todo
+     * ese recorrido, con locks sobre `ventas`, `venta_detalle` y `productos`.
+     * Con el tope, el peor caso esta acotado y es predecible.
+     *
+     * POR QUE 100 como default: una venta de mostrador normal tiene menos de
+     * ~30 lineas y una compra mayorista grande sigue entrando holgadamente en
+     * 100, asi que ninguna operacion legitima habitual queda afuera. Y para el
+     * caso de que exista (un pedido al por mayor de cientos de lineas), el
+     * valor es CONFIGURABLE: se sube `VENTAS_MAX_ITEMS_CARRIZO` en el `.env`
+     * de la raiz del monorepo y el service lo toma de ahi, sin tocar codigo.
+     *
+     * Mismo patron que `pagination.maxLimit`: el default vive en la config y
+     * el service solo lo lee (con su propio fallback por si se construye sin
+     * config en un test).
+     */
+    maxItemsPorCarrito: entero(process.env.VENTAS_MAX_ITEMS_CARRIZO, 100),
+  },
 };
 
 module.exports = appConfig;

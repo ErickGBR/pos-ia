@@ -27,7 +27,12 @@
  * y no se duplican arriba.
  */
 
-const { NotFoundError, ValidationError, ConflictError } = require('../errors/domain-errors');
+const {
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+  PayloadTooLargeError,
+} = require('../errors/domain-errors');
 const { SpError, ERNO_FUERA_DE_RANGO } = require('../errors/sp-error');
 
 /** Precio maximo admitido por la columna DECIMAL(10,2). */
@@ -35,6 +40,13 @@ const PRECIO_MAXIMO = 99999999.99;
 
 /** Techo de `limit` si el service se construye sin config (ver `config/app.js`). */
 const LIMIT_MAXIMO_POR_DEFECTO = 100;
+
+/**
+ * Tope de items por carrito si el service se construye sin config. Mismo valor
+ * por defecto que `config/app.js -> ventas.maxItemsPorCarrito`, que es la fuente
+ * de verdad: este es solo el fallback para un test que arme el service a mano.
+ */
+const MAX_ITEMS_POR_CARRITO_POR_DEFECTO = 100;
 
 /** Tipo de movimiento por defecto cuando el cliente no manda ninguno. */
 const TIPO_POR_DEFECTO = 'normal';
@@ -65,13 +77,14 @@ class VentaService {
    * @param {Object} ventaReadRepo contrato de lectura (ISP: solo lectura)
    * @param {Object} ventaWriteRepo contrato de escritura (ISP: solo `registrarConSP`)
    * @param {Object} [strategies] mapa `tipo -> estrategia` (OCP)
-   * @param {Object} [config] configuracion de la app (defaults de paginacion)
+   * @param {Object} [config] configuracion de la app (`pagination`, `ventas`)
    */
   constructor(ventaReadRepo, ventaWriteRepo, strategies = {}, config = {}) {
     this.read = ventaReadRepo;
     this.write = ventaWriteRepo;
     this.strategies = strategies;
     this.paginacion = config.pagination || {};
+    this.reglasVentas = config.ventas || {};
 
     // Misma fuente de verdad que `ProductoService`: el techo de `limit` sale de
     // `config/app.js -> pagination.maxLimit`, no de un numero repetido aca.
@@ -79,6 +92,14 @@ class VentaService {
     this.maxLimit = Number.isInteger(maxLimit) && maxLimit > 0
       ? maxLimit
       : LIMIT_MAXIMO_POR_DEFECTO;
+
+    // Idem para el tope de items del carrito (M-01): sale de
+    // `config/app.js -> ventas.maxItemsPorCarrito`, que a su vez lo lee de
+    // `VENTAS_MAX_ITEMS_CARRIZO`. El numero NO esta enterrado en este archivo.
+    const maxItems = Number(this.reglasVentas.maxItemsPorCarrito);
+    this.maxItemsPorCarrito = Number.isInteger(maxItems) && maxItems > 0
+      ? maxItems
+      : MAX_ITEMS_POR_CARRITO_POR_DEFECTO;
   }
 
   // ---------------------------------------------------------------- UC-3 ---
@@ -97,6 +118,7 @@ class VentaService {
    * @param {Array<{productoId: number, cantidad: number, precioUnitario: number}>} carrito
    * @param {string} [tipo] tipo de movimiento; `'normal'` si no se indica
    * @returns {Promise<{id: number, total: number, createdAt: *, items: Object[]}>}
+   * @throws {PayloadTooLargeError} el carrito supera `ventas.maxItemsPorCarrito`
    * @throws {ValidationError} carrito vacio, cantidad o precio invalidos, tipo desconocido
    * @throws {NotFoundError} el SP rechazo porque un producto no existe en el catalogo
    * @throws {ConflictError} el SP rechazo por un conflicto de la operacion
@@ -210,6 +232,25 @@ class VentaService {
       throw new ValidationError(
         'El detalle de la venta esta vacio: se debe enviar al menos una linea de producto.',
         { items: 'debe tener al menos una linea' },
+      );
+    }
+
+    // M-01 (DoS / agotamiento de recursos). Va DESPUES de las dos reglas de
+    // forma y ANTES del `.map` que valida linea por linea, a proposito:
+    //   - despues, para no cambiar el contrato de un carrito vacio o no-arreglo
+    //     (se siguen respondiendo 400 con su mensaje de siempre);
+    //   - antes del `.map` y antes de llamar al SP, porque el costo crece con la
+    //     cantidad de items: primero se rechaza el carrito enorme con un 413
+    //     barato, y solo un carrito ya acotado paga la validacion completa, el
+    //     `JSON_TABLE` del SP y los locks de la transaccion.
+    if (carrito.length > this.maxItemsPorCarrito) {
+      throw new PayloadTooLargeError(
+        `El carrito tiene ${carrito.length} items y el maximo permitido es ` +
+        `${this.maxItemsPorCarrito}. Dividi la compra en varias ventas.`,
+        {
+          items: `se recibieron ${carrito.length} items`,
+          maxItemsPorCarrito: this.maxItemsPorCarrito,
+        },
       );
     }
 

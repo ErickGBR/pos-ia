@@ -105,6 +105,9 @@ const ventaStrategies = {
 
 const ventaService = new VentaService(ventaReadRepo, ventaWriteRepo, ventaStrategies, {
   pagination: appConfig.pagination,
+  // Tope de items por carrito (hallazgo M-01). Mismo canal que `pagination`: la
+  // config la arma `config/app.js` y el service solo la recibe por constructor.
+  ventas: appConfig.ventas,
 });
 
 // --- 5. Controllers (dependen del caso de uso) -----------------------------

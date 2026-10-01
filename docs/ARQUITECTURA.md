@@ -174,7 +174,7 @@ pos-basic-ia/
 │       ├── server.js               # listen(). Solo arranca; importa app + container.
 │       ├── container.js            # ★ COMPOSITION ROOT — único que cablea todo (ver §2 DIP)
 │       ├── config/
-│       │   ├── app.js              # env + paginación (pagination.maxLimit) que consumen los services
+│       │   ├── app.js              # env + paginación (pagination.maxLimit) y tope de items del carrito (ventas.maxItemsPorCarrito) que consumen los services
 │       │   └── database.js         # lee env, exporta config por entorno. Único lugar con `new Sequelize` (vía container.js).
 │       ├── routes/
 │       │   ├── producto.routes.js  # router CRUD + búsqueda → ProductoController
@@ -207,7 +207,7 @@ pos-basic-ia/
 │       │   ├── validate.js             # validación de FORMA (requeridos/tipos)
 │       │   └── errorHandler.js         # mapea NotFound→404, Validation→400, Conflict→409 (respeta err.status)
 │       ├── errors/
-│       │   ├── domain-errors.js        # NotFoundError, ValidationError, ConflictError
+│       │   ├── domain-errors.js        # NotFoundError, ValidationError, ConflictError, PayloadTooLargeError
 │       │   └── sp-error.js             # SpError + comoErrorDelSP/comoErrorDeRango (traduce SIGNAL 45000 y errno fuera de rango)
 │       ├── migrations/
 │       │   ├── 20250930000000-create-productos.js
@@ -243,7 +243,7 @@ pos-basic-ia/
 
 ## 4. Casos de uso como contratos de service (firma + qué hace + qué devuelve + qué errores lanza)
 
-> Convención: todos los métodos son `async`, reciben DTOs planos (nunca `req/res`), devuelven objetos planos, lanzan errores de dominio. El controller mapea: `NotFoundError→404`, `ValidationError→400`, `ConflictError→409`.
+> Convención: todos los métodos son `async`, reciben DTOs planos (nunca `req/res`), devuelven objetos planos, lanzan errores de dominio. El controller mapea: `NotFoundError→404`, `ValidationError→400`, `ConflictError→409`, `PayloadTooLargeError→413` (el controller NO elige códigos: es `errorHandler`).
 
 ### UC-1 — Listar y buscar productos
 *Firma:* `productoService.listar({ q?, page=1, limit=20 })`
@@ -264,9 +264,9 @@ pos-basic-ia/
 
 ### UC-3 — Registrar venta (carrito → `sp_registrar_venta`)
 *Firma:* `ventaService.registrar(carrito, tipo='normal')` donde `carrito = [{ productoId, cantidad, precioUnitario }]`.
-*Qué hace:* (1) valida forma (carrito no vacío, `cantidad > 0`, `precioUnitario >= 0` — editable, puede ser 0 por cortesía pero nunca negativo); (2) delega a la Strategy del `tipo` para construir `lineas = [{ producto_id, cantidad, precio_unitario }]`; (3) llama `ventaWriteRepo.registrarConSP(lineas)` que ejecuta, sobre UNA misma conexión del pool (`connectionManager.getConnection()` + `releaseConnection` en `finally`): `SET @pos_venta_id = NULL` → `CALL sp_registrar_venta(:detalle_json, @pos_venta_id)` → `SELECT @pos_venta_id AS id` — el SP valida que cada producto existe, calcula `subtotal = ROUND(cantidad * precio_unitario, 2)` y el `total`, inserta `ventas + venta_detalle` en UNA transacción propia autocontenida, devuelve `p_venta_id` (NO descuenta stock: no existe); (4) re-lee la venta completa vía read repo y la devuelve.
+*Qué hace:* (1) valida forma (carrito no vacío, `cantidad > 0`, `precioUnitario >= 0` — editable, puede ser 0 por cortesía pero nunca negativo) y el **tope de recursos** del carrito: si `items.length > ventas.maxItemsPorCarrito` (configurable con `VENTAS_MAX_ITEMS_CARRIZO`, 100 por defecto) lanza `PayloadTooLargeError` → **413**, ANTES de validar línea por línea y antes de invocar al SP, para que una petición enorme no queme CPU ni mantenga locks; (2) delega a la Strategy del `tipo` para construir `lineas = [{ producto_id, cantidad, precio_unitario }]`; (3) llama `ventaWriteRepo.registrarConSP(lineas)` que ejecuta, sobre UNA misma conexión del pool (`connectionManager.getConnection()` + `releaseConnection` en `finally`): `SET @pos_venta_id = NULL` → `CALL sp_registrar_venta(:detalle_json, @pos_venta_id)` → `SELECT @pos_venta_id AS id` — el SP valida que cada producto existe, calcula `subtotal = ROUND(cantidad * precio_unitario, 2)` y el `total`, inserta `ventas + venta_detalle` en UNA transacción propia autocontenida, devuelve `p_venta_id` (NO descuenta stock: no existe); (4) re-lee la venta completa vía read repo y la devuelve.
 *Devuelve:* `{ id, total, createdAt, items: [{ producto_id, cantidad, precio_unitario, subtotal }] }`.
-*Errores:* `ValidationError` (carrito vacío/cantidades inválidas/tipo desconocido), `NotFoundError` (producto inexistente). Nunca inserta vía ORM.
+*Errores:* `ValidationError` (carrito vacío/cantidades inválidas/tipo desconocido), `PayloadTooLargeError` → 413 (carrito con más items que `ventas.maxItemsPorCarrito`; el mensaje dice cuántos se recibieron y cuál es el máximo), `NotFoundError` (producto inexistente). Nunca inserta vía ORM.
 *Ruta:* `POST /api/ventas` (201). Body: `{ items: [{ productoId, cantidad, precioUnitario }] }`.
 
 ### UC-4 — Listar ventas

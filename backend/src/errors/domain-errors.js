@@ -8,9 +8,10 @@
  * traduce a codigos HTTP:
  *
  *   DomainError (base, NO se mapea: 500)
- *   ├── NotFoundError   -> 404
- *   ├── ValidationError -> 400
- *   └── ConflictError   -> 409
+ *   ├── NotFoundError        -> 404
+ *   ├── ValidationError      -> 400
+ *   ├── ConflictError        -> 409
+ *   └── PayloadTooLargeError -> 413 (`err.status` explicito, ver la clase)
  *
  * Cada error de dominio lleva un `code` estable (contrato para el cliente) y un
  * mensaje en espanol legible. `errorHandler` NO importa `services/` (R3), asi
@@ -73,4 +74,35 @@ class ConflictError extends DomainError {
   }
 }
 
-module.exports = { DomainError, NotFoundError, ValidationError, ConflictError };
+/**
+ * El cuerpo de la peticion es correcto en su FORMA pero excede un tope de
+ * recurso del servidor. -> 413
+ *
+ * Se separa de `ValidationError` a proposito. Un 400 dice "la peticion esta
+ * mal formada": el cliente tendria que corregir los datos para poder reenviarla.
+ * Un 413 dice "la peticion esta bien, pero es demasiado grande para
+ * que la procese": el cliente corrige DIVIDIENDOLA, no editando un campo. Es el
+ * status que la peticion merece cuando el problema es el TAMANO del payload.
+ *
+ * Solo existe para el limite de items del carrito (hallazgo M-01). Lleva su
+ * `status` explicito porque `errorHandler.statusDe` respeta `err.status` antes
+ * del mapeo por constructor: asi el 413 no se convierte en un 400 generico.
+ */
+class PayloadTooLargeError extends DomainError {
+  /**
+   * @param {string} message mensaje legible para el usuario final
+   * @param {Object} [detalles] datos que explican el limite (recibido, maximo)
+   */
+  constructor(message, detalles) {
+    super(message, 'PAYLOAD_TOO_LARGE', detalles);
+    this.status = 413;
+  }
+}
+
+module.exports = {
+  DomainError,
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+  PayloadTooLargeError,
+};

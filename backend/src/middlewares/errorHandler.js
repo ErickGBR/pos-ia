@@ -7,10 +7,11 @@
  * los errores de dominio del service a su codigo:
  *
  *   `err.status` explicito y valido (400..599) -> ese mismo status (manda primero)
- *   NotFoundError   -> 404
- *   ValidationError -> 400
- *   ConflictError   -> 409
- *   DomainError     -> 500 (no deberia escaparse nunca)
+ *   NotFoundError        -> 404
+ *   ValidationError      -> 400
+ *   ConflictError        -> 409
+ *   PayloadTooLargeError -> 413
+ *   DomainError          -> 500 (no deberia escaparse nunca)
  *   error de DB     -> 409 si es violacion de unicidad, 500 si es otro
  *   cualquier otro  -> 500
  *
@@ -21,13 +22,24 @@
  * errores de dominio de `errors/domain-errors.js`.
  */
 
-const { DomainError, NotFoundError, ValidationError, ConflictError } = require('../errors/domain-errors');
+const {
+  DomainError,
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+  PayloadTooLargeError,
+} = require('../errors/domain-errors');
 
 /** Codigo HTTP por tipo de error de dominio (contrato de UC-1/UC-2, §4). */
 const CODIGOS_POR_ERROR = new Map([
   [NotFoundError, 404],
   [ValidationError, 400],
   [ConflictError, 409],
+  // El carrito excede el tope de items: 413, no 400. El status va explicito en
+  // la clase, asi que esta entrada del Map es la red de seguridad por
+  // constructor: si alguien tira el error sin el `status` puesto, el codigo
+  // sigue siendo 413 y no un 500.
+  [PayloadTooLargeError, 413],
   [DomainError, 500],
 ]);
 
