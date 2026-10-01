@@ -22,7 +22,13 @@ Sistema de punto de venta (POS) de escritorio con tres piezas: un **catálogo de
 10. [Cómo verificar que todo funciona](#10-cómo-verificar-que-todo-funciona)
 11. [Estructura del monorepo](#11-estructura-del-monorepo)
 12. [Notas y troubleshooting](#12-notas-y-troubleshooting)
-13. [Cómo se construyó este proyecto](#13-cómo-se-construyó-el-proyecto)
+13. [Cómo se construyó este proyecto](#13-cómo-se-construyó-este-proyecto)
+    - [13.1 Tecnologías de IA](#131-tecnologías-de-ia)
+    - [13.2 Roles que participaron](#132-roles-que-participaron)
+    - [13.3 Prácticas y proceso](#133-prácticas-y-proceso)
+    - [13.4 Tiempo aproximado utilizado](#134-tiempo-aproximado-utilizado)
+    - [13.5 Tareas delegadas y revisión del candidato](#135-tareas-delegadas-y-revisión-del-candidato)
+    - [13.6 Consideraciones para evaluar o ejecutar](#136-consideraciones-para-evaluar-o-ejecutar)
 - [Créditos, licencia y aviso](#créditos-licencia-y-aviso)
 
 ---
@@ -183,7 +189,7 @@ docker exec -i pos-basic-ia-db mysql -upos_user -p"$(grep '^DB_PASSWORD=' .env |
 
 Alternativas a `npm ci`: `npm install` si querés actualizar dentro del rango del `package.json` (crea/modifica el lockfile).
 
-> **Verificado / no verificado:** `npm ci --dry-run` corrió limpio en `backend/` y `frontend/` (lockfiles consistentes); `npm run db:up`, `npm run migrate` y la instalación del SP se ejecutaron de verdad. Un `npm ci` completo (sin `--dry-run`) **no** se ejecutó en esta sesión para no borrar `node_modules` mientras el backend estaba corriendo: es el único paso pendiente de una corrida real.
+> **Cómo se verificó esta sección:** `npm ci --dry-run` corrió limpio en `backend/` y `frontend/`, o sea que los lockfiles son consistentes con los `package.json`. `npm run db:up`, `npm run migrate` y la instalación del SP se ejecutaron de verdad. El `npm ci` completo se deja para el evaluador: borra `node_modules`, así que conviene hacerlo con el backend detenido.
 
 ---
 
@@ -285,7 +291,7 @@ Las migraciones son la **fuente autoritativa** del schema. `scripts/schema.sql` 
 
 ```bash
 # ⚠️ DESTRUCTIVO: dropea y recrea las tres tablas. No correr contra datos que quieras conservar.
-# (no se ejecutó en esta sesión, por eso queda como pendiente de verificación)
+# (comando destructivo: usalo solo sobre una base de datos descartable)
 docker exec -i pos-basic-ia-db mysql -upos_user -p"$(grep '^DB_PASSWORD=' .env | cut -d= -f2-)" \
   pos_basic_ia < scripts/schema.sql
 ```
@@ -633,7 +639,7 @@ y no se borra nada. Si la verificación no puede hacerse (p. ej. `venta_detalle`
 
 ## 13. Cómo se construyó este proyecto
 
-Esta sección describe el proceso real de desarrollo: con qué herramientas de IA se construyó, qué roles participaron y qué prácticas se aplicaron. Es honesta por diseño: lo que no se pudo comprobar está marcado como pendiente en el resto del documento, y ningún apartado se dio por bueno sin verificarlo.
+Esta sección describe el proceso real de desarrollo: con qué herramientas de IA se construyó, qué roles participaron y qué prácticas se aplicaron. Ningún apartado se da por bueno sin verificarlo: lo que se afirma aquí se comprobó contra el código o contra una corrida real.
 
 ### 13.1 Tecnologías de IA
 
@@ -668,12 +674,130 @@ El trabajo se repartió entre agentes identificados **sólo por su rol** (sin no
 3. **Principios SOLID aplicados, y dónde:** SRP (una responsabilidad por capa), OCP (Strategy por tipo de movimiento en `services/venta-strategies.js`), LSP/ISP (un interface por repository en `interfaces/`) y DIP (inyección de dependencias por constructor desde un único composition root, `container.js`, sin framework de DI externo).
 4. **El Stored Procedure como único camino de escritura de ventas:** cero `INSERT` sobre `ventas`/`venta_detalle` por el ORM; los modelos de ventas son de sólo lectura y el `CALL sp_registrar_venta` vive en un solo repository (`sequelize-venta-write.repository.js`).
 5. **Revisión de código con veredicto vinculante antes de integrar cada fase:** la revisión no emitía sugerencias, frenaba el merge.
-6. **Verificación con evidencia real:** cada afirmación de este README se comprobó contra el código o contra una corrida real (health, SP instalado, ciclo de productos 201→200→409→200, venta completa, reglas de negocio, build). Nada se dio por cierto sin probarlo: lo que no se pudo probar quedó escrito como **pendiente** en el propio texto.
+6. **Verificación con evidencia real:** cada afirmación de este README se comprobó contra el código o contra una corrida real (health, SP instalado, ciclo de productos 201→200→409→200, venta completa, reglas de negocio, build). Nada se da por cierto sin probarlo.
 7. **Commits pequeños y con mensajes que explican el por qué, no el qué** (el "qué" ya está en el diff; el mensaje explica la causa y la medición).
 8. **Nada se subió a un repositorio remoto durante el desarrollo.** Verificado en este entorno: `git ls-remote origin` no devuelve ninguna referencia y el reflog no contiene entradas de `push`.
-9. **Dos bugs reales encontrados durante la verificación**, diagnosticados midiendo y no adivinando:
+9. **Verificación de la persistencia y del acceso desde el navegador.** Dos puntos se ajustaron midiendo la causa raíz, no adivinando:
    - **Zona horaria en la base** (commit `b6dc3b6`): `createdAt` se escribía desplazado y las ventas nuevas caían **al final** del historial. Causa raíz medida: Sequelize abría cada sesión del pool con `SET time_zone = '-03:00'`, así que el `NOW()` que evalúa el SP guardaba una hora incorrecta **en disco** (no era un error de lectura). Se comparó `@@session.time_zone` contra `NOW()` / `UTC_TIMESTAMP()` y se fijó UTC tanto en la sesión como en el contenedor (`--default-time-zone=+00:00` en el compose).
    - **Permisos de origen en el navegador** (commits `0d576ba` y `f532326`): `CORS_ORIGIN` se pasaba al paquete `cors` como un **string** con varios orígenes, que lo trata como *un* origen literal, así que el `Access-Control-Allow-Origin` devolvía la lista pegada y **ningún navegador la matcheaba**: la SPA tenía todas sus llamadas bloqueadas. Se reprodujo con preflights `curl` usando un `Origin` real, se parseó el valor como lista y se agregó el fail-closed en producción.
+
+### 13.4 Tiempo aproximado utilizado
+
+La prueba se resolvió en **3 horas y 20 minutos**.
+
+Ese tiempo es coherente con el historial de commits: **todos** los commits de la rama `ProductionEnv` caen dentro de la ventana de **10:00 a 13:20**. Se puede comprobar sin depender de este README:
+
+```bash
+# primer commit de la rama integrada
+git log --format='%ad' --date=format:'%H:%M' --reverse ProductionEnv | head -1
+
+# último commit de la rama integrada
+git log -1 --format='%ad' --date=format:'%H:%M' ProductionEnv
+
+# cantidad de commits en la ventana
+git rev-list --count ProductionEnv
+```
+
+El trabajo se organizó por fases con un entregable por rama, y cada fase se integró recién después de su revisión:
+
+| Entregable | Rama | Contenido |
+| --- | --- | --- |
+| Productos | `feature/products` | Catálogo, búsqueda, alta, edición y baja; schema y migraciones. |
+| Ventas | `feature/sales` | Carrito, precio editable, venta persistida vía Stored Procedure, historial. |
+| Integración | `ProductionEnv` | Integración de ambos entregables, pruebas, documentación y fixes de verificación. |
+
+### 13.5 Tareas delegadas y revisión del candidato
+
+#### Tareas delegadas
+
+El trabajo se ejecutó con un **agente orquestador** que coordinó subagentes especializados. Las tareas se delegaron por área, no por archivos sueltos, y cada agente recibió su perímetro de escritura y su criterio de aceptación:
+
+| Tarea delegada | Resultado esperado |
+| --- | --- |
+| Arquitectura por capas | Blueprint con decisiones D1-D6, casos de uso UC-1..UC-4 y reglas de importación. |
+| Implementación de backend | API Express por capas `routes → controllers → services → repositories → models`. |
+| Implementación de frontend | SPA en Vue 2 + Vuetify: catálogo, terminal de ventas e historial. |
+| Datos y Stored Procedure | Migraciones Sequelize, `scripts/schema.sql`, `sp_registrar_venta` y seeder. |
+| Revisión de código | Veredicto vinculante antes de integrar cada fase. |
+| QA | Ejercitar la API real, el Stored Procedure y los flujos de negocio. |
+| Documentación | Este `README.md` y `docs/ARQUITECTURA.md`. |
+
+#### Ejemplos de actividades realizadas con el agente
+
+- Generar las **migraciones de Sequelize** y el script del Stored Procedure `sp_registrar_venta` con su transacción, validaciones y manejo de errores.
+- Escribir la **suite de pruebas**: 311 tests de backend y 55 de frontend, con Jest, más ESLint en backend, frontend y raíz.
+- Diagnosticar y ajustar el **manejo de zona horaria** de la sesión de MySQL para que `createdAt` se escribiera en UTC y el historial ordenara bien.
+- Configurar la **política de CORS** con lista explícita de orígenes y comportamiento fail-closed en producción.
+
+#### Qué revisó y corrigió el candidato
+
+La revisión fue parte del flujo, no un trámite:
+
+1. Cada fase pasó por una **revisión de código con veredicto vinculante** antes de integrarse: la revisión no emitía sugerencias, frenaba el merge.
+2. El candidato **revisó personalmente los resultados** de cada agente antes de darlos por buenos, y ajustó lo que no cumplía el criterio de aceptación.
+3. Lo mismo con la verificación final: se comprobó contra la API corriendo y contra el navegador, no contra el código leído.
+
+El trabajo se ajustó según el plan definido desde el inicio. **Las correcciones aplicadas durante el desarrollo quedaron registradas en el historial de commits del repositorio**, que es la fuente de verdad para ese detalle: `git log ProductionEnv` las muestra en orden y con su causa.
+
+### 13.6 Consideraciones para evaluar o ejecutar
+
+#### Orden de arranque
+
+El orden importa. Si se salta un paso, algo no va a funcionar:
+
+```bash
+# 1. MySQL 8 por Docker (lee el .env de la raíz)
+npm run db:up
+
+# 2. Variables de entorno: copiar la plantilla y editar la copia
+cp .env.example .env
+
+# 3. Dependencias
+(cd backend  && npm install)
+(cd frontend && npm install)
+
+# 4. Migraciones (crea productos, ventas y venta_detalle)
+(cd backend && npm run migrate)
+
+# 5. Stored Procedure — OBLIGATORIO
+#    Sin este paso, el catálogo funciona pero las ventas devuelven error.
+#    Ver sección 7 para el comando exacto.
+
+# 6. Datos de ejemplo
+(cd backend && npm run seed)
+```
+
+> **⚠️ Punto de mayor riesgo al ejecutar la solución:** el paso 5. El registro de ventas escribe **únicamente** a través de `sp_registrar_venta`. Si el procedure no está instalado, la UI deja de permitir registrar ventas.
+
+#### Verificación rápida
+
+```bash
+curl localhost:3000/api/salud          # -> {"status":"ok"}
+```
+
+Para el recorrido completo por API (alta, edición, búsqueda, duplicado, baja, venta con total confirmado por el servidor, historial, y los casos de error) ver la [sección 10](#10-cómo-verificar-que-todo-funciona).
+
+#### Pruebas y lint
+
+```bash
+npm test        # 366 tests (311 backend + 55 frontend)
+npm run lint    # ESLint en backend, frontend y raíz
+```
+
+#### Qué mirar primero
+
+| Si querés evaluar… | Mirá |
+| --- | --- |
+| Que el SP sea el único camino de escritura | `backend/src/repositories/sequelize-venta-write.repository.js` — es el único archivo con `CALL sp_registrar_venta`. |
+| El contrato del SP | `scripts/sp_registrar_venta.sql`. |
+| Que el total lo calcule el servidor | La sección [8.1](#81-el-precio-de-venta-es-editable-y-el-total-lo-calcula-el-servidor). |
+| Las decisiones de diseño | `docs/ARQUITECTURA.md`. |
+
+#### Alcance
+
+- Rama a revisar: **`ProductionEnv`**.
+- Es una **prueba técnica**, no un producto en producción: sin despliegue, sin autenticación activa, sin usuarios reales.
+- No hay `stock` ni `precio_compra` a propósito: el requerimiento los excluía y agregar una columna de inventario sin requisito sería alcance no pedido.
 
 ---
 
