@@ -29,6 +29,19 @@ dotenv.config({ path: path.resolve(__dirname, '..', '..', '..', '.env') });
 // Un `.env` local de backend/ tiene prioridad si existe (override de desarrollo).
 dotenv.config({ path: path.resolve(__dirname, '..', '..', '.env'), override: true });
 
+/**
+ * Zona horaria de TODAS las conexiones de la aplicacion. UTC, FIJO.
+ *
+ * NO es un knob de operacion: antes lo era (`process.env.DB_TIMEZONE`) y su
+ * default era `'-03:00'`. Ese default rompio el historial de ventas (ver
+ * "POR QUE UTC Y NO UN OFFSET" mas abajo) y ahora esta fijado a proposito.
+ *
+ * Se declara ANTES de `config` a proposito: `ajustesComunes()` lo lee al construir
+ * los bloques, asi que declararlo despues lo deja en TDZ y el arranque revienta
+ * con `ReferenceError` (medido, no supuesto).
+ */
+const ZONA_HORARIA_UTC = '+00:00';
+
 /** Lee un entero del entorno con fallback (las variables llegan como texto). */
 function entero(valor, porDefecto) {
   const n = Number.parseInt(valor, 10);
@@ -84,7 +97,47 @@ function ajustesComunes() {
   return {
     dialect: 'mysql',
     logging: false,
-    timezone: process.env.DB_TIMEZONE || '-03:00',
+
+    /**
+     * UTC FIJO. Medido, no supuesto (el sintoma era "las ventas nuevas caen al
+     * final del historial").
+     *
+     * QUE HACE ESTA OPCION, que es lo que nadie espera: Sequelize NO la usa solo
+     * para interpretar los DATETIME que LEE. Al abrir cada conexion del pool le
+     * manda al servidor un `SET time_zone = '<timezone>'`
+     * (`sequelize/lib/dialects/mysql/connection-manager.js`, rama
+     * `if (!this.sequelize.config.keepDefaultTimezone)`). O sea: esta opcion
+     * cambia la zona horaria DE LA SESION DE MYSQL.
+     *
+     * Y eso levanta el punto grave: `sp_registrar_venta` inserta la cabecera con
+     * `INSERT INTO ventas (total, createdAt, updatedAt) VALUES (v_total, NOW(),
+     * NOW())`. `NOW()` se evalua en el servidor, con la zona de la sesion. Con la
+     * sesion en `-03:00` el NOW() valia tres horas menos que el UTC real y ese
+     * valor equivocado QUEDABA ESCRITO en la fila. No era un error de lectura:
+     * el dato ya estaba corrupto en disco.
+     *
+     * Como `GET /api/ventas` ordena `ORDER BY createdAt DESC`, las ventas nuevas
+     * (3h mas temprano de lo que deberian) quedaban POR DEBAJO de las viejas: el
+     * historial al reves.
+     *
+     * MEDICION de la causa raiz (no una teoria):
+     *   host            America/El_Salvador, UTC-6   (`date +%z`)
+     *   contenedor MySQL TZ=UTC, offset +0000
+     *   base, por CLI   @@system_time_zone=UTC, NOW() == UTC_TIMESTAMP()  (03:50:21)
+     *   base, por la app @@session.time_zone='-03:00', NOW()=00:51:03 vs
+     *                    UTC_TIMESTAMP()=03:51:03
+     *   Node            process.env.TZ undefined, toISOString() correcto
+     * Con `timezone:'+00:00'` la misma consulta devuelve NOW() == UTC_TIMESTAMP().
+     *
+     * POR QUE UTC Y NO UN OFFSET LOCAL: con `+00:00` la sesion de MySQL coincide
+     * con el UTC real, asi que `NOW()` del SP, la hora que ve Node y la que se
+     * lee por API son la MISMA, y el valor es correcto en la base y no depende de
+     * desde donde se lea. Fijarlo aqui ademas neutraliza el `@@global.time_zone`
+     * del servidor: si ese dia alguien configura la base en otra zona, la
+     * aplicacion sigue escribiendo UTC.
+     */
+    timezone: ZONA_HORARIA_UTC,
+
     dialectOptions: {
       dateStrings: true,
       typeCast: true,

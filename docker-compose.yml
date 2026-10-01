@@ -27,6 +27,15 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
+      # UTC a nivel de SERVIDOR (defensa en profundidad del bug de zona horaria).
+      # La app ya fija `timezone: '+00:00'` en backend/src/config/database.js, que
+      # manda `SET time_zone='+00:00'` en cada conexion del pool. Esto cubre el
+      # otro extremo: que CUALQUIER cliente que escriba en esta base (el CLI de
+      # mysql, un DBeaver, un script de mantenimiento) tambien guards UTC, y no
+      # solo la API. Sin esto, escribir por fuera de la API reintroducia el
+      # desfase. Solo afecta a ESTE servicio, que publica en 127.0.0.1:3307: el
+      # MariaDB nativo del host en el 3306 no se toca.
+      - --default-time-zone=+00:00
 
     ports:
       # Bind a 127.0.0.1: no expoongo MySQL a la red local.
