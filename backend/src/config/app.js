@@ -33,24 +33,38 @@ function entero(valor, porDefecto) {
  * trata un string como UN ORIGEN LITERAL, nunca como lista: si se le pasa la
  * cadena entera responde `Access-Control-Allow-Origin` con la lista pegada y el
  * browser no matchea ninguno, asi que bloquea todas las llamadas. Por eso se
- * parte por coma y se entrega un ARRAY cuando hay mas de un origen — el
- * paquete lo soporta nativamente — o el string suelto cuando hay uno solo.
+ * parte por coma y se entrega SIEMPRE UN ARRAY.
+ *
+ * SIEMPRE array, incluso con un solo origen (fix del menor de CORS). El
+ * comportamiento del paquete `cors` esta verificado en su codigo y con curl, no
+ * de cabeza (`cors/lib/index.js`, `configureOrigin`):
+ *
+ *   - `options.origin === '*'`  -> comodin, responde `Access-Control-Allow-Origin: *`
+ *   - `isString(options.origin)` -> responds SIEMPRE con ese valor fijo, SIN
+ *                                  comparar el `Origin` de la peticion
+ *   - ARRAY                      -> `isOriginAllowed(origin, lista)`: COMPARA y
+ *                                  solo refleja el origen si esta en la lista
+ *
+ * Antes, con un solo origen configurado se entregaba un string, o sea la rama
+ * que NO compara. Hoy eso no abre la API (el ACAO que sale sigue siendo el
+ * configurado, nunca el del atacante, asi que su browser lo bloquea igual), pero
+ * es una bomba de tiempo: en cuanto se agregue `credentials: true` el string
+ * fijo se_combina con el allow-credentials y deja de proteger. Con array, la
+ * comparacion esta siempre activa.
+ *
+ * EXCEPCION DELVAGUIO, que se deja como string a proposito: cuando no hay
+ * ningun origen configurado se devuelve `'*'`, el centinela de comodin del
+ * paquete. Devolver `['*']` NO seria "dejarlo como array": caeria en la rama de
+ * comparacion, `'*'` nunca matchea un `Origin` real y CORS quedaria
+ * DESACTIVADO en desarrollo (curl, Postman y los tests de integracion lo
+ * necesitan). O sea, un array silenciosamente rompe donde el string abre. El
+ * comodin se reconoce por la forma, no por el contenido.
  *
  * Sin dependencias nuevas: `split` / `trim` / `filter` alcanzan.
  *
- * OJO, comportamiento del paquete `cors` (verificado con curl, no de cabeza):
- * con `origin` ARRAY el paquete COMPARA contra el `Origin` de la peticion y solo
- * lo refleja si esta en la lista; con `origin` STRING no compara nada y devuelve
- * el valor configurado siempre, venga el `Origin` que venga. Con un solo origen
- * eso NO abre la API —el `Access-Control-Allow-Origin` que sale sigue siendo el
- * configurado, nunca el del atacante, asi que su browser lo bloquea igual— pero
- * por eso la lista de mas de un origen debe seguir siendo ARRAY. Si alguna vez
- * se necesita comparar siempre (p. ej. al agregar `credentials: true`), pasar
- * SIEMPRE array y nunca un string suelto.
- *
  * @param {string|undefined} valor crudo de `process.env.CORS_ORIGIN`
  * @returns {string|string[]} `'*'` si no hay ninguno (solo tolerable en
- *   desarrollo), el origen si es uno solo, o el array de origenes si hay varios
+ *   desarrollo), o SIEMPRE un array de origenes si hay uno o mas
  */
 function origenesCors(valor) {
   const lista = String(valor || '')
@@ -59,7 +73,6 @@ function origenesCors(valor) {
     .filter((origen) => origen !== '');
 
   if (lista.length === 0) return '*';
-  if (lista.length === 1) return lista[0];
   return lista;
 }
 
@@ -105,9 +118,12 @@ const appConfig = {
   port: entero(process.env.BACKEND_PORT || process.env.PORT, 3000),
 
   /**
-   * Origenes permitidos, YA parseados por {@link origenesCors}: array cuando hay
-   * mas de uno, string cuando hay uno solo. El paquete `cors` acepta las dos
-   * formas. En `production`, `'*'` y la lista vacia cortan el arranque.
+   * Origenes permitidos, YA parseados por {@link origenesCors}: SIEMPRE un array
+   * cuando hay al menos un origen configurado, para que el paquete `cors`
+   * compare el `Origin` entrante en vez de devolver un valor fijo. Solo queda
+   * como string el comodin `'*'` (sin origenes configurados), que es el
+   * centinela del propio paquete. En `production`, `'*'` y la lista vacia cortan
+   * el arranque.
    */
   cors: {
     origin: origenCors,
